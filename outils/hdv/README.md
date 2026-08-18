@@ -125,7 +125,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File outils/hdv/lire-le-hdv.ps1 -
 Chaque capture réelle est aussi écrite dans `journal/`. Sans ça, aucune
 régression d'OCR n'est diagnosticable.
 
-## Deux pièges déjà payés
+## Trois pièges déjà payés
 
 - **`lire-le-hdv.ps1` doit rester en UTF-8 avec BOM.** PowerShell 5.1 lit un
   `.ps1` sans BOM comme de l'ANSI, et le moindre caractère accentué casse alors
@@ -134,3 +134,7 @@ régression d'OCR n'est diagnosticable.
 - **`HotIf()` en fonction, pas la directive `#HotIf`.** Les raccourcis sont posés
   par `Hotkey()` à l'exécution, et celui-ci ne connaît que le critère fonctionnel.
   Mélanger les deux donne des touches actives partout, navigateur compris.
+- **`file` est un nom réservé en AHK v2**, celui de la classe `File`. Le script
+  refuse de se charger, avant même la première touche, sur un message qui ne dit
+  pas que le nom est pris : *This Class cannot be used as an output variable*.
+  D'où `fileDAttente`. Même prudence avec `Gui`, `Menu`, `Map`, `Object`, `Error`.

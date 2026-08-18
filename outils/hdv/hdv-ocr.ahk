@@ -40,7 +40,11 @@ LECTEUR := DOSSIER "\lire-le-hdv.ps1"
 JOURNAL := DOSSIER "\journal"
 
 ; La file, une ligne de format d'échange par ressource relevée.
-file := []
+;
+; Nommée `fileDAttente` et pas `file` : AutoHotkey v2 réserve ce nom pour sa
+; classe File. L'erreur tombe au chargement du script, avant la première touche,
+; avec un message qui ne dit pas que le nom est réservé.
+fileDAttente := []
 
 if !FileExist(LECTEUR) {
     MsgBox "Introuvable :`n" LECTEUR "`n`nLe script doit rester à côté de lire-le-hdv.ps1.",
@@ -92,14 +96,14 @@ ColonnesDe(ligne) {
  * pour copier » à oublier avant de basculer sur le navigateur.
  */
 RecopierLaFile() {
-    global file, SERVEUR
-    if file.Length = 0 {
+    global fileDAttente, SERVEUR
+    if fileDAttente.Length = 0 {
         A_Clipboard := ""
         return
     }
     horodatage := FormatTime(A_Now, "yyyy-MM-dd'T'HH:mm:ss")
     lignes := "#DOFUS-HDV/1`t" SERVEUR "`t" horodatage
-    for ligne in file
+    for ligne in fileDAttente
         lignes .= "`n" ligne
     A_Clipboard := lignes
 }
@@ -145,7 +149,7 @@ Hotkey(TOUCHE_MONTRER_LA_FILE, (*) => MontrerLaFile())
 HotIf
 
 Capturer() {
-    global file
+    global fileDAttente
     Infobulle("Lecture…")
     resultat := LireLePopup(WinExist("A"))
 
@@ -165,7 +169,7 @@ Capturer() {
     nom := colonnes.Has(2) ? colonnes[2] : ""
     confiance := colonnes.Has(9) ? colonnes[9] : "1"
 
-    file.Push(premiereLigne)
+    fileDAttente.Push(premiereLigne)
     RecopierLaFile()
 
     ; L'infobulle est le premier filtre, et le plus efficace : tu vois le chiffre
@@ -174,35 +178,35 @@ Capturer() {
         ? "`n/!\ lecture douteuse, les lots ne se tiennent pas entre eux" : ""
     Infobulle(Format("{1}{2}`n{3}`n{4} en file, presse-papier à jour{5}",
         nom = "" ? "" : nom, nom = "" ? "" : " —", ResumerUneLigne(premiereLigne),
-        file.Length, avertissement))
+        fileDAttente.Length, avertissement))
 }
 
 RetirerLaDerniere() {
-    global file
-    if file.Length = 0 {
+    global fileDAttente
+    if fileDAttente.Length = 0 {
         Infobulle("La file est déjà vide.")
         return
     }
-    file.Pop()
+    fileDAttente.Pop()
     RecopierLaFile()
-    Infobulle("Dernière entrée retirée. " file.Length " en file.")
+    Infobulle("Dernière entrée retirée. " fileDAttente.Length " en file.")
 }
 
 ViderLaFile() {
-    global file
-    file := []
+    global fileDAttente
+    fileDAttente := []
     RecopierLaFile()
     Infobulle("File vidée.")
 }
 
 MontrerLaFile() {
-    global file
-    if file.Length = 0 {
+    global fileDAttente
+    if fileDAttente.Length = 0 {
         Infobulle("File vide. " TOUCHE_CAPTURER " pour relever un prix.")
         return
     }
-    texte := file.Length " ressource(s) en file :"
-    for index, ligne in file {
+    texte := fileDAttente.Length " ressource(s) en file :"
+    for index, ligne in fileDAttente {
         colonnes := ColonnesDe(ligne)
         texte .= "`n" index ". " (colonnes.Has(2) ? colonnes[2] : "?")
             . "   " ResumerUneLigne(ligne)
