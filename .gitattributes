@@ -1,0 +1,15 @@
+# Fins de ligne, dépôt travaillé depuis un Mac et un PC.
+#
+# Le LF est autoritaire dans le dépôt, indépendamment du `core.autocrlf` de la
+# machine : un clone sous Windows avec la valeur par défaut posait un working
+# tree en CRLF face à un index en LF, ce qui reste invisible jusqu'à la première
+# modification, puis fait apparaître un diff sur la totalité du fichier.
+* text=auto eol=lf
+
+# Le script d'origine est une copie de référence, jamais modifiée. On ne
+# touche pas non plus à ses octets.
+*.ahk -text
+
+# Binaires, pas de conversion.
+*.png binary
+*.ico binary
