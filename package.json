@@ -1,0 +1,12 @@
+{
+  "name": "calculateur-craft-dofus",
+  "private": true,
+  "type": "module",
+  "description": "Outils Dofus personnels. Le site statique est dans calculateur/, les tests dans outils/.",
+  "scripts": {
+    "test": "node outils/test-moteur-calcul.js",
+    "test:api": "node outils/verifier-les-api.js",
+    "test:interface": "node outils/verifier-interface.js",
+    "servir": "node outils/servir.js"
+  }
+}

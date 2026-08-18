@@ -1,0 +1,12 @@
+# Netlify. Aucun build : le site est du HTML, du CSS et des modules ES servis
+# tels quels. `publish` pointe sur ce dossier, `command` reste vide.
+[build]
+  publish = "."
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+    Referrer-Policy = "no-referrer"
+    X-Content-Type-Options = "nosniff"

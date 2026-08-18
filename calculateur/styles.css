@@ -1,0 +1,275 @@
+/* ============================================================
+   Calculateur de craft Dofus
+   Pensé pour une fenêtre de moitié d'écran, en colonne unique.
+
+   CODE COULEUR, à respecter partout :
+
+     violet   un prix relevé par Brice, partagé avec la base communautaire
+     bleu     un prix venu de la base, en repère, remplaçable à la frappe
+     neutre   un prix strictement local : lots de 10, 100, 1000, prix moyen
+     vert     JAMAIS une provenance. Réservé aux montants gagnants et au fond
+              des cellules que le calcul recommande d'acheter.
+
+   La bordure d'un champ porte la provenance, le fond de la cellule porte la
+   recommandation d'achat. Deux canaux distincts, jamais superposés : une
+   bordure ne peut pas dire deux choses à la fois.
+   ============================================================ */
+
+:root {
+  color-scheme: dark;
+  --fond-page:        #0b0f0c;
+  --fond-carte:       #131a15;
+  --fond-champ:       #0a0e0b;
+  --bordure:          #23302a;
+  --bordure-active:   #4d6b45;
+  --texte:            #dfe6df;
+  --texte-attenue:    #7e8b80;
+  --accent:           #b6e34a;
+  --gain:             #7fd858;
+  --perte:            #ff6b6b;
+  --alerte:           #d8bb4a;
+
+  /* Provenance des prix */
+  --a-moi:            #b98cf0;
+  --a-moi-sourd:      rgba(185, 140, 240, .16);
+  --de-la-base:       #6fb7e0;
+  --de-la-base-sourd: rgba(111, 183, 224, .13);
+
+  /* Recommandation d'achat */
+  --fond-recommande:  rgba(182, 227, 74, .10);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; padding: 0 16px 60px;
+  background: var(--fond-page); color: var(--texte);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px; line-height: 1.5;
+}
+
+h1 { font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin: 0; }
+h2 {
+  font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--texte-attenue); margin: 26px 0 10px; font-weight: 600;
+}
+a { color: var(--de-la-base); }
+
+button {
+  font: inherit; cursor: pointer; color: var(--texte);
+  background: #1b241d; border: 1px solid var(--bordure);
+  border-radius: 7px; padding: 6px 11px;
+}
+button:hover { border-color: var(--bordure-active); }
+button.bouton-discret { background: none; color: var(--texte-attenue); padding: 4px 8px; }
+button.bouton-discret:hover { color: var(--perte); }
+
+input {
+  font: inherit; color: var(--texte); background: var(--fond-champ);
+  border: 1px solid var(--bordure); border-radius: 7px; padding: 6px 9px; width: 100%;
+}
+input:focus { outline: none; border-color: var(--accent); }
+input::placeholder { color: #4c574f; }
+
+.petit { font-size: 11px; }
+.exposant { font-size: 9px; letter-spacing: .08em; color: var(--a-moi); text-transform: uppercase; }
+
+/* ---- En-tête ---- */
+.entete-application {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 0 12px; flex-wrap: wrap;
+}
+.entete-application .groupe-boutons {
+  margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+}
+.interrupteur-compact {
+  font-size: 11px; display: flex; align-items: center; gap: 5px; cursor: pointer;
+}
+.interrupteur-compact input { width: auto; }
+.champ-taxe { width: 62px; text-align: right; }
+
+/* ---- Bandeau d'état ----
+   Tout ce qui part vers le réseau ou en revient s'annonce ici. Une publication
+   est une écriture publique : elle ne doit jamais se faire en silence. ---- */
+.journal { font-size: 11px; color: var(--texte-attenue); min-height: 17px; margin-bottom: 6px; }
+.journal.en-cours { color: var(--de-la-base); }
+.journal.en-succes { color: var(--a-moi); }
+.journal.en-echec  { color: var(--alerte); }
+
+/* ---- Bandeau de résultats, collant en haut ---- */
+.bandeau-resultats {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--fond-carte); border: 1px solid var(--bordure); border-radius: 12px;
+  padding: 14px 16px; display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  box-shadow: 0 8px 22px rgba(0,0,0,.55);
+}
+.case-resultat .intitule {
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--texte-attenue);
+}
+.case-resultat .valeur { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.case-resultat .precision { font-size: 11px; color: var(--texte-attenue); }
+
+/* ---- Recherche de recette ---- */
+.zone-recherche { position: relative; }
+.liste-suggestions {
+  position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px);
+  background: var(--fond-carte); border: 1px solid var(--bordure-active);
+  border-radius: 10px; max-height: 320px; overflow: auto; box-shadow: 0 10px 26px rgba(0,0,0,.6);
+}
+.liste-suggestions:empty { display: none; }
+.ligne-suggestion { display: flex; align-items: center; gap: 10px; padding: 8px 11px; cursor: pointer; }
+.ligne-suggestion:hover, .ligne-suggestion.survolee { background: #1d2a20; }
+.ligne-suggestion img { width: 28px; height: 28px; }
+.ligne-suggestion .details { font-size: 11px; color: var(--texte-attenue); }
+
+/* ---- Lignes de craft ---- */
+.carte-craft {
+  background: var(--fond-carte); border: 1px solid var(--bordure);
+  border-radius: 11px; padding: 11px 13px; margin-bottom: 9px;
+}
+.carte-craft .entete-craft { display: flex; align-items: center; gap: 10px; }
+.carte-craft .entete-craft img { width: 34px; height: 34px; }
+.carte-craft .nom-craft { font-weight: 600; }
+.carte-craft .niveau-craft { font-size: 11px; color: var(--texte-attenue); }
+.grille-champs-craft {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 8px; margin-top: 10px;
+}
+.champ-etiquete .etiquette {
+  font-size: 10px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--texte-attenue); margin-bottom: 3px; display: block;
+}
+.bilan-ligne {
+  margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--bordure);
+  font-size: 12px; display: flex; flex-wrap: wrap; gap: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Tableau des ressources ---- */
+.zone-tableau { overflow-x: auto; }
+.tableau-ressources { width: 100%; border-collapse: collapse; }
+.tableau-ressources th {
+  font-size: 10px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--texte-attenue); text-align: left; font-weight: 600;
+  padding: 0 6px 7px; white-space: nowrap;
+}
+.tableau-ressources th.colonne-partagee { color: var(--a-moi); }
+.tableau-ressources td {
+  padding: 6px; border-top: 1px solid var(--bordure); vertical-align: middle;
+}
+.tableau-ressources td.colonne-nom { min-width: 180px; }
+.cellule-nom-ressource { display: flex; align-items: center; gap: 8px; }
+.cellule-nom-ressource img { width: 26px; height: 26px; flex: none; }
+.champ-prix-lot { width: 88px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- Provenance : la bordure du champ ---- */
+
+/* Violet : relevé par Brice, donc publié vers la base. */
+.champ-prix-lot.prix-a-moi, input.prix-a-moi {
+  border-color: var(--a-moi); background: var(--a-moi-sourd);
+}
+.champ-prix-lot.publication-en-cours { opacity: .6; }
+.champ-prix-lot.publication-en-echec { border-color: var(--alerte); border-style: dashed; }
+
+/* Bleu pointillé : venu de la base, en repère seulement. Le champ est vide, la
+   valeur n'est qu'un texte de remplacement : la première frappe part d'un champ
+   propre et rien n'est enregistré au nom de Brice tant qu'il n'a pas saisi. */
+.champ-prix-lot.prix-de-la-base, input.prix-de-la-base {
+  border-color: var(--de-la-base); border-style: dashed;
+}
+.champ-prix-lot.prix-de-la-base::placeholder, input.prix-de-la-base::placeholder {
+  color: var(--de-la-base); opacity: 1; font-style: italic;
+}
+
+/* ---- Recommandation d'achat : le fond de la cellule ---- */
+.tableau-ressources td.cellule-recommandee {
+  background: var(--fond-recommande);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Prix moyen : le montant du lot et la taille du lot forment un contrôle unique. */
+.cellule-prix-moyen { display: flex; gap: 4px; align-items: center; }
+.selecteur-taille-lot {
+  font: inherit; font-size: 11px; color: var(--texte-attenue);
+  background: var(--fond-champ); border: 1px solid var(--bordure);
+  border-radius: 7px; padding: 6px 2px; cursor: pointer; flex: none;
+}
+.selecteur-taille-lot:focus { outline: none; border-color: var(--accent); }
+
+/* ---- Pastilles à côté du nom de la ressource ---- */
+.pastille {
+  font-size: 10px; letter-spacing: .04em; border-radius: 4px;
+  padding: 0 4px; margin-left: 5px; white-space: nowrap; cursor: help;
+  border: 1px solid currentColor;
+}
+.pastille-a-moi     { color: var(--a-moi); }
+.pastille-base      { color: var(--de-la-base); }
+.pastille-ancienne  { color: var(--alerte); }
+.pastille-envoi     { color: var(--texte-attenue); }
+.pastille-echec     { color: var(--perte); }
+.pastille-desaccord { color: var(--alerte); border-style: dashed; }
+
+/* ---- Revue de revalidation, et réglages ---- */
+.voile-revue {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(4, 7, 5, .93);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  overflow: auto;
+}
+.carte-revue {
+  background: var(--fond-carte); border: 1px solid var(--bordure-active);
+  border-radius: 14px; padding: 24px; width: 100%; max-width: 460px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.7);
+}
+.carte-reglages { max-width: 520px; }
+.carte-revue .avancement {
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--texte-attenue); margin-bottom: 14px;
+}
+.carte-revue .identite-ressource { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.carte-revue .identite-ressource img { width: 40px; height: 40px; }
+.carte-revue .nom-ressource-revue { font-size: 18px; font-weight: 650; }
+.carte-revue .grille-champs-revue {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px; margin: 18px 0 14px;
+}
+.carte-revue .champ-revue input { text-align: right; font-variant-numeric: tabular-nums; }
+.carte-revue .aide-clavier { font-size: 11px; color: var(--texte-attenue); margin-top: 12px; }
+.carte-revue .aide-clavier kbd {
+  background: #1b241d; border: 1px solid var(--bordure); border-radius: 4px;
+  padding: 1px 5px; font-family: inherit; font-size: 10px;
+}
+.note-reglage { font-size: 11px; color: var(--texte-attenue); margin: 6px 0 16px; }
+.ligne-boutons-reglage {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;
+  font-size: 11px;
+}
+.interrupteur { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+.interrupteur input { width: auto; }
+
+/* ---- Légende et divers ---- */
+.legende {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 11px; color: var(--texte-attenue); margin-top: 12px;
+}
+.echantillon {
+  display: inline-block; width: 22px; height: 14px; border-radius: 4px;
+  border: 1px solid var(--bordure); vertical-align: middle; margin-left: 10px;
+}
+.echantillon-a-moi { border-color: var(--a-moi); background: var(--a-moi-sourd); }
+.echantillon-base { border-color: var(--de-la-base); border-style: dashed; }
+.echantillon-recommande { background: var(--fond-recommande); box-shadow: inset 2px 0 0 var(--accent); }
+
+.colonne-chiffre { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mention-composition { font-size: 11px; color: var(--texte-attenue); white-space: nowrap; }
+.prix-manquant { color: var(--alerte); font-size: 11px; }
+.prix-ancien { color: var(--alerte); font-size: 11px; }
+.texte-vide { color: var(--texte-attenue); font-size: 13px; padding: 10px 0; }
+.gain { color: var(--gain); } .perte { color: var(--perte); } .attenue { color: var(--texte-attenue); }
+
+.note-bas-de-page {
+  margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--bordure);
+  font-size: 11px; color: var(--texte-attenue); max-width: 900px;
+}
+.note-bas-de-page p { margin: 0 0 10px; }

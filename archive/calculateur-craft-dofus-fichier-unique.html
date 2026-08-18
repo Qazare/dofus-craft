@@ -1,0 +1,2043 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculateur de craft Dofus</title>
+<style>
+/* ============================================================
+   Feuille de style
+   Pensée pour une fenêtre de moitié d'écran, en colonne unique.
+   ============================================================ */
+:root {
+  color-scheme: dark;
+  --fond-page:        #0b0f0c;
+  --fond-carte:       #131a15;
+  --fond-champ:       #0a0e0b;
+  --bordure:          #23302a;
+  --bordure-active:   #4d6b45;
+  --texte:            #dfe6df;
+  --texte-attenue:    #7e8b80;
+  --accent:           #b6e34a;
+  --gain:             #7fd858;
+  --perte:            #ff6b6b;
+  --alerte:           #d8bb4a;
+  --communautaire:    #6fb7e0;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 16px 60px;
+  background: var(--fond-page); color: var(--texte);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px; line-height: 1.5;
+}
+h1 { font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin: 0; }
+h2 {
+  font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--texte-attenue); margin: 26px 0 10px; font-weight: 600;
+}
+button {
+  font: inherit; cursor: pointer; color: var(--texte);
+  background: #1b241d; border: 1px solid var(--bordure);
+  border-radius: 7px; padding: 6px 11px;
+}
+button:hover { border-color: var(--bordure-active); }
+button.bouton-discret { background: none; color: var(--texte-attenue); padding: 4px 8px; }
+button.bouton-discret:hover { color: var(--perte); }
+input {
+  font: inherit; color: var(--texte); background: var(--fond-champ);
+  border: 1px solid var(--bordure); border-radius: 7px; padding: 6px 9px; width: 100%;
+}
+input:focus { outline: none; border-color: var(--accent); }
+input::placeholder { color: #4c574f; }
+
+/* ---- En-tête et bandeau de résultats collant en haut ---- */
+.entete-application {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 0 12px; flex-wrap: wrap;
+}
+.entete-application .groupe-boutons { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.bandeau-resultats {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--fond-carte); border: 1px solid var(--bordure); border-radius: 12px;
+  padding: 14px 16px; display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  box-shadow: 0 8px 22px rgba(0,0,0,.55);
+}
+.case-resultat .intitule {
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--texte-attenue);
+}
+.case-resultat .valeur { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.case-resultat .precision { font-size: 11px; color: var(--texte-attenue); }
+
+/* ---- Recherche de recette ---- */
+.zone-recherche { position: relative; }
+.liste-suggestions {
+  position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px);
+  background: var(--fond-carte); border: 1px solid var(--bordure-active);
+  border-radius: 10px; max-height: 320px; overflow: auto; box-shadow: 0 10px 26px rgba(0,0,0,.6);
+}
+.liste-suggestions:empty { display: none; }
+.ligne-suggestion { display: flex; align-items: center; gap: 10px; padding: 8px 11px; cursor: pointer; }
+.ligne-suggestion:hover, .ligne-suggestion.survolee { background: #1d2a20; }
+.ligne-suggestion img { width: 28px; height: 28px; }
+.ligne-suggestion .details { font-size: 11px; color: var(--texte-attenue); }
+
+/* ---- Lignes de craft ---- */
+.carte-craft {
+  background: var(--fond-carte); border: 1px solid var(--bordure);
+  border-radius: 11px; padding: 11px 13px; margin-bottom: 9px;
+}
+.carte-craft .entete-craft { display: flex; align-items: center; gap: 10px; }
+.carte-craft .entete-craft img { width: 34px; height: 34px; }
+.carte-craft .nom-craft { font-weight: 600; }
+.carte-craft .niveau-craft { font-size: 11px; color: var(--texte-attenue); }
+.grille-champs-craft {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 8px; margin-top: 10px;
+}
+.champ-etiquete .etiquette {
+  font-size: 10px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--texte-attenue); margin-bottom: 3px; display: block;
+}
+.bilan-ligne {
+  margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--bordure);
+  font-size: 12px; display: flex; flex-wrap: wrap; gap: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Tableau des ressources ---- */
+.tableau-ressources { width: 100%; border-collapse: collapse; }
+.tableau-ressources th {
+  font-size: 10px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--texte-attenue); text-align: left; font-weight: 600;
+  padding: 0 6px 7px; white-space: nowrap;
+}
+.tableau-ressources td {
+  padding: 6px; border-top: 1px solid var(--bordure); vertical-align: middle;
+}
+.tableau-ressources td.colonne-nom { min-width: 170px; }
+.cellule-nom-ressource { display: flex; align-items: center; gap: 8px; }
+.cellule-nom-ressource img { width: 26px; height: 26px; flex: none; }
+.champ-prix-lot { width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
+.champ-prix-lot.lot-retenu { border-color: var(--accent); }
+
+/* Prix moyen : le montant du lot et la taille du lot forment un contrôle unique. */
+.cellule-prix-moyen { display: flex; gap: 4px; align-items: center; }
+.selecteur-taille-lot {
+  font: inherit; font-size: 11px; color: var(--texte-attenue);
+  background: var(--fond-champ); border: 1px solid var(--bordure);
+  border-radius: 7px; padding: 6px 2px; cursor: pointer; flex: none;
+}
+.selecteur-taille-lot:focus { outline: none; border-color: var(--accent); }
+
+/* ---- Prix communautaires, venus de dofus-calculator.fr ----
+   Tout ce qui n'a pas été saisi par Brice doit se distinguer au premier coup
+   d'oeil d'un prix qu'il a relevé lui-même : couleur propre et bordure en
+   pointillés, pour qu'un chiffre emprunté ne se confonde jamais avec un chiffre
+   vérifié. ---- */
+input.attend-un-prix-communautaire {
+  border-style: dashed; border-color: var(--communautaire);
+}
+input.attend-un-prix-communautaire::placeholder {
+  color: var(--communautaire); opacity: 1; font-style: italic;
+}
+.marque-communautaire {
+  color: var(--communautaire); font-size: 10px; letter-spacing: .06em;
+  border: 1px solid var(--communautaire); border-radius: 4px;
+  padding: 0 4px; margin-left: 6px; white-space: nowrap; cursor: help;
+}
+.marque-communautaire.releve-ancien { color: var(--alerte); border-color: var(--alerte); }
+.etat-synchronisation { font-size: 11px; color: var(--texte-attenue); }
+.etat-synchronisation.en-echec { color: var(--alerte); }
+
+/* ---- Revue de revalidation des prix anciens ---- */
+.voile-revue {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(4, 7, 5, .93);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.carte-revue {
+  background: var(--fond-carte); border: 1px solid var(--bordure-active);
+  border-radius: 14px; padding: 24px; width: 100%; max-width: 460px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.7);
+}
+.carte-revue .avancement {
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--texte-attenue); margin-bottom: 14px;
+}
+.carte-revue .identite-ressource { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.carte-revue .identite-ressource img { width: 40px; height: 40px; }
+.carte-revue .nom-ressource-revue { font-size: 18px; font-weight: 650; }
+.carte-revue .grille-champs-revue {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px; margin: 18px 0 14px;
+}
+.carte-revue .champ-revue input { text-align: right; font-variant-numeric: tabular-nums; }
+.carte-revue .aide-clavier { font-size: 11px; color: var(--texte-attenue); margin-top: 12px; }
+.carte-revue .aide-clavier kbd {
+  background: #1b241d; border: 1px solid var(--bordure); border-radius: 4px;
+  padding: 1px 5px; font-family: inherit; font-size: 10px;
+}
+.colonne-chiffre { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mention-composition { font-size: 11px; color: var(--texte-attenue); white-space: nowrap; }
+.prix-manquant { color: var(--alerte); font-size: 11px; }
+.prix-ancien { color: var(--alerte); }
+
+.texte-vide { color: var(--texte-attenue); font-size: 13px; padding: 10px 0; }
+.gain { color: var(--gain); } .perte { color: var(--perte); } .attenue { color: var(--texte-attenue); }
+.note-bas-de-page {
+  margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--bordure);
+  font-size: 11px; color: var(--texte-attenue);
+}
+</style>
+</head>
+<body>
+
+<div class="entete-application">
+  <h1>Calculateur de craft</h1>
+  <div class="groupe-boutons">
+    <label class="attenue" style="font-size:11px;display:flex;align-items:center;gap:5px;cursor:pointer">
+      <input type="checkbox" id="caseModePrixMoyen" style="width:auto"> Estimer aux prix moyens
+    </label>
+    <span class="attenue" style="font-size:11px">Taxe HDV</span>
+    <input id="champTauxDeTaxe" style="width:62px;text-align:right" value="2">
+    <span class="attenue" style="font-size:11px">%</span>
+    <button id="boutonRevoirLesPrix">Revérifier les prix</button>
+    <button id="boutonSynchroniserLesPrixCommunautaires" title="Recharger les prix relevés par les joueurs sur Brial">Prix Brial</button>
+    <button id="boutonPictureInPicture">PIP</button>
+    <button id="boutonExporter">Exporter</button>
+    <button id="boutonImporter">Importer</button>
+    <button id="boutonViderSession" class="bouton-discret">Vider la session</button>
+  </div>
+</div>
+
+<div class="etat-synchronisation" id="etatDeLaSynchronisation"></div>
+
+<div class="bandeau-resultats" id="bandeauResultats"></div>
+
+<h2>Crafts de la session</h2>
+<div class="zone-recherche">
+  <input id="champRechercheRecette" placeholder="Nom de l'objet à crafter, par exemple Coiffe du Boufcoul" autocomplete="off">
+  <div class="liste-suggestions" id="listeSuggestions"></div>
+</div>
+<div id="conteneurCrafts"></div>
+
+<h2>Ressources à acheter</h2>
+<div id="conteneurRessources"></div>
+
+<div class="note-bas-de-page">
+  Prix saisissables en abrégé : <strong>12k</strong> vaut 12 000, <strong>1,5m</strong> vaut 1 500 000.<br>
+  Le <strong>prix moyen</strong> se saisit comme le HDV l'affiche, c'est à dire le montant du lot entier,
+  avec la taille du lot choisie juste à côté. L'unitaire est déduit, jamais saisi, et rappelé en info-bulle.<br>
+  <strong>Revérifier les prix</strong> passe en revue, une ressource à la fois et au clavier, tous les prix
+  jamais renseignés ou vieux de plus de sept jours. Entrée valide et passe au suivant, Échap ferme.
+  Confirmer sans rien changer rafraîchit quand même la date du prix.<br>
+  <strong>PIP</strong> détache une vue compacte qui reste devant le jeu. Les prix y sont modifiables et
+  les deux fenêtres restent synchronisées.<br>
+  Un champ de prix s'allume en vert quand le calcul recommande d'acheter par ce lot,
+  pas quand il affiche le meilleur prix unitaire : un lot avantageux à l'unité mais inutile
+  pour la quantité voulue reste éteint. À coût égal, le calcul retient la solution qui
+  achète le moins de surplus.<br>
+  Le coût de chaque objet est une quote-part du coût groupé des ressources, calculée au prorata des quantités,
+  puisque acheter en lot pour plusieurs recettes à la fois coûte moins cher que recette par recette.<br>
+  L'XP par craft dépend de ton niveau de métier : elle est mémorisée par recette, donc pense à la corriger
+  après une montée de niveau.<br>
+  Les prix <span class="marque-communautaire">com.</span> viennent de dofus-calculator.fr, relevés par les joueurs
+  sur le serveur Brial. Ils ne servent que de valeur de repli, en pointillés bleus : dès que tu saisis un prix
+  dans le champ, c'est le tien qui compte. La date du relevé est rappelée dans l'info-bulle, et vire à l'orange
+  passé sept jours.<br>
+  Données des recettes fournies par l'API publique DofusDude, prix communautaires par dofus-calculator.fr.
+  Tes prix à toi ne sont stockés que dans ce navigateur, et ne sont jamais envoyés nulle part.
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   1. CONSTANTES ET ÉTAT
+   ============================================================ */
+
+const ADRESSE_BASE_API_DOFUSDUDE = "https://api.dofusdu.de/dofus3/v1/fr";
+const CLE_STOCKAGE_LOCAL = "calculateur-craft-dofus-v1";
+
+/**
+ * Prix relevés par les joueurs, via l'API publique de dofus-calculator.fr.
+ * Lecture ouverte, sans jeton : le jeton n'est requis que pour l'écriture, et
+ * le calculateur ne publie rien.
+ *
+ * Le serveur est fixé à Brial, seul serveur joué. Les prix d'un autre serveur
+ * n'ont aucun sens ici, donc on ne les récupère pas.
+ *
+ * Coïncidence exploitée : le `dofusdb_id` de cette API est l'identifiant Ankama,
+ * celui-là même que renvoie DofusDude sous le nom `ankama_id`. Vérifié sur
+ * plusieurs ressources, dont le Blé, 289 des deux côtés. Aucune table de
+ * correspondance n'est donc nécessaire.
+ */
+const ADRESSE_BASE_API_PRIX_COMMUNAUTAIRES = "https://dofus-calculator.fr/api";
+const IDENTIFIANT_DU_SERVEUR_SUIVI = 22;
+const NOM_DU_SERVEUR_SUIVI = "Brial";
+const NOMBRE_MAXIMAL_DE_RESSOURCES_PAR_APPEL_COMMUNAUTAIRE = 100;
+const TAILLES_DE_LOT_DISPONIBLES = [1, 10, 100, 1000];
+const NOMBRE_DE_JOURS_AVANT_PRIX_CONSIDERE_ANCIEN = 7;
+
+/**
+ * Version du schéma de l'état sauvegardé.
+ *
+ * 1 : le prix moyen était stocké en prix UNITAIRE, champ `prixMoyenUnitaire`.
+ * 2 : le prix moyen est stocké tel que le HDV l'affiche, c'est à dire le prix
+ *     du LOT ENTIER, champ `prixMoyenDuLot`, accompagné de la taille du lot
+ *     concerné dans `tailleDuLotDuPrixMoyen`. La division en unitaire est faite
+ *     par le calcul, plus jamais de tête.
+ * 3 : ajout de `prixCommunautairesParRessource`, cache des prix relevés par les
+ *     joueurs sur dofus-calculator.fr. Rangé à part de `basePrixDesRessources`
+ *     et jamais fusionné avec elle : un prix emprunté ne doit à aucun moment
+ *     pouvoir se faire passer pour un prix relevé par Brice, ni l'écraser.
+ *
+ * Toute évolution du format des données doit incrémenter ce numéro et ajouter
+ * son étape dans `migrerLEtatVersLeSchemaCourant`.
+ */
+const VERSION_COURANTE_DU_SCHEMA = 3;
+
+/** Taille de lot appliquée par défaut à un prix moyen fraîchement saisi. */
+const TAILLE_DE_LOT_PAR_DEFAUT_POUR_LE_PRIX_MOYEN = 1;
+
+/**
+ * État complet de l'application, sauvegardé tel quel dans le stockage local.
+ *
+ * craftsDeLaSession : une entrée par objet à crafter dans la séance.
+ * basePrixDesRessources : mémoire longue des prix, conservée d'une session à l'autre,
+ *                         indexée par identifiant Ankama de la ressource.
+ * cacheDesObjets : noms et icônes déjà résolus, pour éviter de réinterroger l'API.
+ */
+let etatApplication = {
+  versionDuSchema: VERSION_COURANTE_DU_SCHEMA,
+  tauxDeTaxeEnPourcent: 2,
+  // Quand ce mode est actif, le coût est estimé à partir du prix moyen affiché
+  // par le jeu, sans tenir compte des prix de lot saisis. Sert à dégrossir vite.
+  modeEstimationParPrixMoyen: false,
+  craftsDeLaSession: [],
+  basePrixDesRessources: {},
+  // Prix communautaires mis en cache, indexés par identifiant Ankama. Conservés
+  // d'une session à l'autre pour que l'outil reste utilisable sans réseau, et
+  // pour que la fenêtre PIP n'ait jamais à rappeler l'API de son côté.
+  prixCommunautairesParRessource: {},
+  cacheDesObjets: {},
+  // Mémoire de l'XP par craft, saisie une fois par recette et réutilisée ensuite,
+  // avec le niveau de métier auquel elle a été relevée puisqu'elle en dépend.
+  memoireExperienceParRecette: {}
+};
+
+/* ============================================================
+   2. PERSISTANCE
+   ============================================================ */
+
+function sauvegarderEtatDansLeStockageLocal() {
+  try {
+    localStorage.setItem(CLE_STOCKAGE_LOCAL, JSON.stringify(etatApplication));
+  } catch (erreur) {
+    console.warn("Sauvegarde impossible dans le stockage local :", erreur);
+  }
+}
+
+function chargerEtatDepuisLeStockageLocal() {
+  try {
+    const contenuBrut = localStorage.getItem(CLE_STOCKAGE_LOCAL);
+    if (!contenuBrut) return;
+    const etatCharge = JSON.parse(contenuBrut);
+    // Fusion prudente : une version future du fichier peut avoir des champs en plus.
+    etatApplication = Object.assign(etatApplication, etatCharge);
+    migrerLEtatVersLeSchemaCourant();
+  } catch (erreur) {
+    console.warn("État sauvegardé illisible, on repart d'un état vierge :", erreur);
+  }
+}
+
+/**
+ * Met l'état chargé au format attendu par la version courante du code.
+ *
+ * Appelée aussi bien au démarrage qu'après un import JSON, puisqu'un fichier de
+ * sauvegarde exporté par une version antérieure porte l'ancien format.
+ *
+ * La fonction est idempotente : la relancer sur un état déjà à jour ne fait rien.
+ * C'est ce qui permet de l'appeler sans se demander d'où vient l'état.
+ */
+function migrerLEtatVersLeSchemaCourant() {
+  const versionDeLEtatCharge = etatApplication.versionDuSchema || 1;
+  if (versionDeLEtatCharge >= VERSION_COURANTE_DU_SCHEMA) {
+    etatApplication.versionDuSchema = VERSION_COURANTE_DU_SCHEMA;
+    return;
+  }
+
+  // --- Passage de 1 à 2 : le prix moyen devient un prix de lot ---
+  //
+  // Les valeurs de la version 1 sont des prix unitaires. Les convertir en prix
+  // de lot de taille 1 préserve donc leur montant exact et leur signification,
+  // sans qu'aucun chiffre affiché ne bouge. C'est une migration à effet nul sur
+  // les totaux, ce qui est précisément le but.
+  if (versionDeLEtatCharge < 2) {
+    for (const identifiantDeRessource of Object.keys(etatApplication.basePrixDesRessources || {})) {
+      const fichePrix = etatApplication.basePrixDesRessources[identifiantDeRessource];
+      if (!fichePrix) continue;
+
+      const ancienPrixUnitaire = fichePrix.prixMoyenUnitaire || 0;
+      if (fichePrix.prixMoyenDuLot === undefined) {
+        fichePrix.prixMoyenDuLot = ancienPrixUnitaire;
+        fichePrix.tailleDuLotDuPrixMoyen = 1;
+      }
+      delete fichePrix.prixMoyenUnitaire;
+    }
+    console.info("Base de prix migrée du schéma 1 vers le schéma 2 : "
+      + "les prix moyens unitaires sont devenus des prix de lot de taille 1.");
+  }
+
+  // --- Passage de 2 à 3 : apparition du cache des prix communautaires ---
+  //
+  // Rien à convertir, le champ n'existait pas. Il suffit de le créer vide pour
+  // que le reste du code n'ait jamais à tester son existence.
+  if (versionDeLEtatCharge < 3) {
+    if (!etatApplication.prixCommunautairesParRessource) {
+      etatApplication.prixCommunautairesParRessource = {};
+    }
+  }
+
+  etatApplication.versionDuSchema = VERSION_COURANTE_DU_SCHEMA;
+  sauvegarderEtatDansLeStockageLocal();
+}
+
+/**
+ * Prix unitaire déduit du prix moyen saisi, quel que soit le lot sur lequel il
+ * a été relevé. Point de passage unique : aucun autre endroit du code ne divise
+ * un prix moyen par une taille de lot.
+ *
+ * @returns {number} 0 si aucun prix moyen n'est renseigné pour cette ressource
+ */
+/**
+ * Récupère la fiche de prix d'une ressource, en la créant vide si elle n'existe
+ * pas encore. Point de création unique de ces fiches : le tableau principal, la
+ * revue de revalidation et la fenêtre PIP passent tous par ici, ce qui garantit
+ * qu'aucune fiche ne naît avec un champ manquant.
+ */
+function obtenirOuCreerLaFichePrixDUneRessource(identifiantAnkama, nomDeLaRessource) {
+  if (!etatApplication.basePrixDesRessources[identifiantAnkama]) {
+    etatApplication.basePrixDesRessources[identifiantAnkama] = {
+      nom: nomDeLaRessource,
+      prixParTailleDeLot: {},
+      prixMoyenDuLot: 0,
+      tailleDuLotDuPrixMoyen: TAILLE_DE_LOT_PAR_DEFAUT_POUR_LE_PRIX_MOYEN,
+      horodatageDerniereMiseAJour: null
+    };
+  }
+  return etatApplication.basePrixDesRessources[identifiantAnkama];
+}
+
+function deduireLePrixMoyenUnitaire(fichePrixDeLaRessource) {
+  if (!fichePrixDeLaRessource) return 0;
+  const prixDuLot = fichePrixDeLaRessource.prixMoyenDuLot || 0;
+  const tailleDuLot = fichePrixDeLaRessource.tailleDuLotDuPrixMoyen
+    || TAILLE_DE_LOT_PAR_DEFAUT_POUR_LE_PRIX_MOYEN;
+  if (prixDuLot <= 0 || tailleDuLot <= 0) return 0;
+  return prixDuLot / tailleDuLot;
+}
+
+/* ============================================================
+   3. OUTILS DE SAISIE ET D'AFFICHAGE DES NOMBRES
+   ============================================================ */
+
+/**
+ * Interprète une saisie de prix tolérante : "12k", "1,5m", "45 000" ou "3200".
+ * @returns {number} le montant en kamas, 0 si la saisie est vide ou illisible
+ */
+function interpreterSaisieDeMontant(saisieBrute) {
+  if (saisieBrute === null || saisieBrute === undefined) return 0;
+
+  const texteNettoye = String(saisieBrute)
+    .toLowerCase()
+    .replace(/\s| /g, "")   // espaces, y compris insécables
+    .replace(",", ".");
+
+  if (texteNettoye === "") return 0;
+
+  const correspondance = texteNettoye.match(/^([0-9]*\.?[0-9]+)([km])?$/);
+  if (!correspondance) return 0;
+
+  const valeurNumerique = parseFloat(correspondance[1]);
+  const suffixeMultiplicateur = correspondance[2];
+
+  if (suffixeMultiplicateur === "k") return Math.round(valeurNumerique * 1000);
+  if (suffixeMultiplicateur === "m") return Math.round(valeurNumerique * 1000000);
+  return Math.round(valeurNumerique);
+}
+
+function formaterMontantEnKamas(montant) {
+  const montantArrondi = Math.round(montant || 0);
+  return montantArrondi.toLocaleString("fr-FR").replace(/ | /g, " ") + " k";
+}
+
+function formaterNombreSimple(valeur) {
+  return Math.round(valeur || 0).toLocaleString("fr-FR").replace(/ | /g, " ");
+}
+
+function calculerAgeEnJoursDepuis(horodatageMillisecondes) {
+  if (!horodatageMillisecondes) return null;
+  return Math.floor((Date.now() - horodatageMillisecondes) / 86400000);
+}
+
+/* ============================================================
+   4. ACCÈS À L'API DOFUSDUDE
+   ============================================================ */
+
+/**
+ * Recherche des équipements par nom. La réponse contient déjà la recette,
+ * ce qui évite un second appel pour obtenir les ingrédients.
+ */
+async function rechercherDesEquipementsParNom(termeDeRecherche) {
+  const adresse = ADRESSE_BASE_API_DOFUSDUDE
+    + "/items/equipment/search?query=" + encodeURIComponent(termeDeRecherche) + "&limit=8";
+  const reponse = await fetch(adresse);
+  if (!reponse.ok) throw new Error("Recherche refusée par l'API, code " + reponse.status);
+  return await reponse.json();
+}
+
+/**
+ * Résout le nom et l'icône d'un objet à partir de son identifiant Ankama.
+ * Ces données ne changent pas entre deux mises à jour du jeu, donc on les met
+ * en cache définitivement pour ne plus jamais rappeler l'API dessus.
+ */
+async function obtenirLesInformationsDUnObjet(identifiantAnkama, sousTypeDObjet) {
+  const cleDeCache = sousTypeDObjet + ":" + identifiantAnkama;
+  if (etatApplication.cacheDesObjets[cleDeCache]) {
+    return etatApplication.cacheDesObjets[cleDeCache];
+  }
+
+  const adresse = ADRESSE_BASE_API_DOFUSDUDE + "/items/" + sousTypeDObjet + "/" + identifiantAnkama;
+  const reponse = await fetch(adresse);
+  if (!reponse.ok) throw new Error("Objet " + identifiantAnkama + " introuvable, code " + reponse.status);
+
+  const donneesObjet = await reponse.json();
+  const informationsRetenues = {
+    identifiantAnkama: donneesObjet.ankama_id,
+    nom: donneesObjet.name,
+    adresseIcone: donneesObjet.image_urls ? donneesObjet.image_urls.icon : ""
+  };
+
+  etatApplication.cacheDesObjets[cleDeCache] = informationsRetenues;
+  sauvegarderEtatDansLeStockageLocal();
+  return informationsRetenues;
+}
+
+/* ============================================================
+   4 bis. PRIX COMMUNAUTAIRES, API DOFUS-CALCULATOR
+
+   Une base de prix d'hôtel de vente alimentée par les joueurs. Elle ne
+   remplace pas les relevés de Brice, elle bouche les trous : une ressource
+   jamais renseignée reçoit un ordre de grandeur au lieu de rien du tout.
+
+   Trois règles qui structurent tout ce qui suit :
+
+   1. Un prix communautaire n'est JAMAIS écrit dans `basePrixDesRessources`.
+      Il vit dans son propre cache. Une saisie de Brice ne peut donc pas être
+      écrasée par une synchronisation, et un chiffre emprunté ne peut pas se
+      faire passer pour un chiffre vérifié.
+   2. Il ne sert qu'en dernier recours, quand aucun prix personnel n'existe
+      pour la ressource.
+   3. Il s'affiche toujours en pointillés bleus, avec la date du relevé. La
+      base contient des prix vieux de plusieurs mois, dont la fraîcheur est
+      une information au moins aussi importante que le montant.
+
+   L'API renvoie un prix UNITAIRE, sans notion de lot. Il est donc rangé
+   comme tel et comparé aux unitaires déduits, jamais aux prix de lot bruts.
+   ============================================================ */
+
+/**
+ * Interroge l'API pour un paquet d'identifiants Ankama et range les prix du
+ * serveur suivi dans le cache. Découpe en appels de taille raisonnable, la
+ * pagination de l'API plafonnant à 100 éléments par page.
+ *
+ * Ne lève pas : un échec réseau, un fichier ouvert hors ligne ou une API en
+ * panne ne doivent pas empêcher le calculateur de fonctionner sur les prix
+ * déjà saisis. Le nombre de ressources réellement mises à jour est renvoyé.
+ *
+ * @param {number[]} identifiantsAnkama
+ * @returns {Promise<{nombreDeReponses:number, messageDErreur:string|null}>}
+ */
+async function recupererLesPrixCommunautaires(identifiantsAnkama) {
+  const identifiantsAInterroger = Array.from(new Set(identifiantsAnkama)).filter(Boolean);
+  if (identifiantsAInterroger.length === 0) {
+    return { nombreDeReponses: 0, messageDErreur: null };
+  }
+
+  let nombreDeReponses = 0;
+
+  for (let debut = 0; debut < identifiantsAInterroger.length;
+       debut += NOMBRE_MAXIMAL_DE_RESSOURCES_PAR_APPEL_COMMUNAUTAIRE) {
+
+    const paquet = identifiantsAInterroger
+      .slice(debut, debut + NOMBRE_MAXIMAL_DE_RESSOURCES_PAR_APPEL_COMMUNAUTAIRE);
+
+    const adresse = ADRESSE_BASE_API_PRIX_COMMUNAUTAIRES
+      + "/items?dofusdb_id=in:" + paquet.join(",")
+      + "&include=prices"
+      + "&server_id=" + IDENTIFIANT_DU_SERVEUR_SUIVI
+      + "&per_page=" + NOMBRE_MAXIMAL_DE_RESSOURCES_PAR_APPEL_COMMUNAUTAIRE;
+
+    try {
+      const reponse = await fetch(adresse);
+      if (!reponse.ok) {
+        return { nombreDeReponses: nombreDeReponses,
+                 messageDErreur: "code " + reponse.status };
+      }
+
+      const donnees = await reponse.json();
+      for (const objet of (donnees.data || [])) {
+        // L'API filtre déjà sur le serveur demandé : le tableau contient au
+        // plus une entrée, et zéro si personne n'a jamais relevé ce prix sur
+        // Brial. Une ressource sans relevé n'est pas mise en cache du tout,
+        // pour ne pas cacher un « pas de prix » comme s'il valait quelque chose.
+        const releve = (objet.prices || [])[0];
+        if (!releve || !(releve.price > 0)) continue;
+
+        etatApplication.prixCommunautairesParRessource[objet.dofusdb_id] = {
+          nom: objet.name,
+          prixUnitaire: releve.price,
+          horodatageDuReleve: Date.parse(releve.updated_at || releve.created_at) || null,
+          horodatageDeLaRecuperation: Date.now()
+        };
+        nombreDeReponses++;
+      }
+    } catch (erreur) {
+      return { nombreDeReponses: nombreDeReponses, messageDErreur: erreur.message };
+    }
+  }
+
+  sauvegarderEtatDansLeStockageLocal();
+  return { nombreDeReponses: nombreDeReponses, messageDErreur: null };
+}
+
+/** Identifiants Ankama de toutes les ressources présentes dans la session. */
+function listerLesIdentifiantsDesRessourcesDeLaSession() {
+  const identifiants = [];
+  for (const craft of etatApplication.craftsDeLaSession) {
+    for (const ingredient of craft.ingredients) identifiants.push(ingredient.identifiantAnkama);
+  }
+  return identifiants;
+}
+
+/**
+ * Prix communautaire connu pour une ressource, ou null s'il n'y en a pas.
+ * Point de lecture unique du cache : aucun autre endroit du code ne va y
+ * chercher directement.
+ */
+function obtenirLePrixCommunautaire(identifiantAnkama) {
+  const enCache = (etatApplication.prixCommunautairesParRessource || {})[identifiantAnkama];
+  if (!enCache || !(enCache.prixUnitaire > 0)) return null;
+  return enCache;
+}
+
+/** Vrai si Brice a lui-même renseigné au moins un prix pour cette ressource. */
+function laRessourceAUnPrixPersonnel(fichePrix) {
+  if (!fichePrix) return false;
+  if (deduireLePrixMoyenUnitaire(fichePrix) > 0) return true;
+  return TAILLES_DE_LOT_DISPONIBLES.some(taille => (fichePrix.prixParTailleDeLot || {})[taille] > 0);
+}
+
+/**
+ * Recharge les prix communautaires de toute la session et redessine.
+ * Appelée au démarrage, après l'ajout d'un craft, et à la demande.
+ */
+async function synchroniserLesPrixCommunautairesDeLaSession() {
+  const identifiants = listerLesIdentifiantsDesRessourcesDeLaSession();
+  if (identifiants.length === 0) {
+    afficherLEtatDeLaSynchronisation("");
+    return;
+  }
+
+  afficherLEtatDeLaSynchronisation("Prix " + NOM_DU_SERVEUR_SUIVI + " en cours de récupération…");
+  const bilan = await recupererLesPrixCommunautaires(identifiants);
+
+  if (bilan.messageDErreur) {
+    afficherLEtatDeLaSynchronisation(
+      "Prix communautaires indisponibles (" + bilan.messageDErreur + "), "
+      + "le calcul continue sur les prix déjà connus.", true);
+  } else {
+    afficherLEtatDeLaSynchronisation(
+      bilan.nombreDeReponses + " prix communautaire(s) trouvé(s) sur "
+      + NOM_DU_SERVEUR_SUIVI + " pour " + identifiants.length + " ressource(s) en session.");
+  }
+
+  redessinerToutLEcran();
+}
+
+function afficherLEtatDeLaSynchronisation(texte, enEchec) {
+  const zone = document.getElementById("etatDeLaSynchronisation");
+  if (!zone) return;
+  zone.textContent = texte || "";
+  zone.classList.toggle("en-echec", !!enEchec);
+}
+
+/**
+ * Mention affichée à côté d'une ressource dont le coût repose sur un prix
+ * communautaire. Rappelle le montant et l'âge du relevé, et passe à l'orange
+ * dès que le relevé a dépassé le seuil d'ancienneté : sur cette base, des prix
+ * de plusieurs mois côtoient des prix du jour.
+ */
+function construireLaMarqueDePrixCommunautaire(prixCommunautaire) {
+  if (!prixCommunautaire) return "";
+
+  const ageEnJours = calculerAgeEnJoursDepuis(prixCommunautaire.horodatageDuReleve);
+  const mentionDeLAge = ageEnJours === null
+    ? "date de relevé inconnue"
+    : ageEnJours === 0 ? "relevé aujourd'hui" : "relevé il y a " + ageEnJours + " jour(s)";
+
+  const releveEstAncien = ageEnJours === null
+    || ageEnJours >= NOMBRE_DE_JOURS_AVANT_PRIX_CONSIDERE_ANCIEN;
+
+  return ' <span class="marque-communautaire' + (releveEstAncien ? " releve-ancien" : "") + '"'
+    + ' title="Prix communautaire ' + NOM_DU_SERVEUR_SUIVI + ", "
+    + formaterNombreSimple(prixCommunautaire.prixUnitaire) + " kamas l\'unité, "
+    + mentionDeLAge + ". Saisis ton propre prix pour le remplacer.\">com."
+    + (ageEnJours === null ? "" : " " + ageEnJours + " j") + "</span>";
+}
+
+/* ============================================================
+   5. MOTEUR DE CALCUL
+
+   Cœur du problème : acheter N unités d'une ressource au meilleur prix,
+   sachant qu'on peut acheter par 1, 10, 100 ou 1000, et que le prix au
+   kama près n'est pas forcément le meilleur sur le plus gros lot.
+
+   Attention au piège : la solution gloutonne, qui prend toujours le lot
+   au meilleur prix unitaire, n'est pas optimale. Exemple : il faut 12
+   unités, le lot de 10 coûte 50 kamas et l'unité 100 kamas. Le glouton
+   achète 1 lot de 10 puis 2 unités, soit 250 kamas, alors qu'acheter 2
+   lots de 10 en coûte 100 pour 20 unités. Il faut donc autoriser le
+   surachat, ce que fait la programmation dynamique ci-dessous.
+   ============================================================ */
+
+const QUANTITE_MAXIMALE_TRAITEE_PAR_PROGRAMMATION_DYNAMIQUE = 200000;
+
+/**
+ * Détermine la façon la moins chère d'obtenir AU MOINS la quantité demandée.
+ *
+ * @param {number} quantiteNecessaire
+ * @param {Object} prixParTailleDeLot  dictionnaire taille de lot vers prix du lot
+ * @returns {{coutTotal:number, compositionDesAchats:Object, prixUnitaireEffectif:number}|null}
+ *          null si aucun prix n'a été saisi pour cette ressource
+ */
+function calculerLAchatLeMoinsCher(quantiteNecessaire, prixParTailleDeLot) {
+  const lotsUtilisables = TAILLES_DE_LOT_DISPONIBLES
+    .map(taille => ({ taille: taille, prix: prixParTailleDeLot ? (prixParTailleDeLot[taille] || 0) : 0 }))
+    .filter(lot => lot.prix > 0);
+
+  if (lotsUtilisables.length === 0) return null;
+  if (quantiteNecessaire <= 0) {
+    return { coutTotal: 0, compositionDesAchats: {}, prixUnitaireEffectif: 0 };
+  }
+
+  // Garde-fou : au-delà d'une certaine quantité on retombe sur une heuristique
+  // gloutonne, car le tableau de programmation dynamique deviendrait trop lourd.
+  if (quantiteNecessaire > QUANTITE_MAXIMALE_TRAITEE_PAR_PROGRAMMATION_DYNAMIQUE) {
+    return calculerLAchatParHeuristiqueGloutonne(quantiteNecessaire, lotsUtilisables);
+  }
+
+  // coutMinimalPourQuantite[q] = coût minimal pour obtenir au moins q unités.
+  const coutMinimalPourQuantite = new Float64Array(quantiteNecessaire + 1);
+  const dernierLotChoisiPourQuantite = new Int32Array(quantiteNecessaire + 1);
+
+  for (let quantite = 1; quantite <= quantiteNecessaire; quantite++) {
+    let meilleurCout = Infinity;
+    let meilleureTailleDeLot = 0;
+
+    for (const lot of lotsUtilisables) {
+      const quantiteRestanteApresCeLot = Math.max(0, quantite - lot.taille);
+      const coutCandidat = lot.prix + coutMinimalPourQuantite[quantiteRestanteApresCeLot];
+      if (coutCandidat < meilleurCout) {
+        meilleurCout = coutCandidat;
+        meilleureTailleDeLot = lot.taille;
+      }
+    }
+
+    coutMinimalPourQuantite[quantite] = meilleurCout;
+    dernierLotChoisiPourQuantite[quantite] = meilleureTailleDeLot;
+  }
+
+  // Reconstitution du panier en remontant les choix enregistrés.
+  const compositionDesAchats = {};
+  let quantiteRestanteAReconstituer = quantiteNecessaire;
+  while (quantiteRestanteAReconstituer > 0) {
+    const tailleChoisie = dernierLotChoisiPourQuantite[quantiteRestanteAReconstituer];
+    compositionDesAchats[tailleChoisie] = (compositionDesAchats[tailleChoisie] || 0) + 1;
+    quantiteRestanteAReconstituer = Math.max(0, quantiteRestanteAReconstituer - tailleChoisie);
+  }
+
+  const coutTotal = coutMinimalPourQuantite[quantiteNecessaire];
+  return {
+    coutTotal: coutTotal,
+    compositionDesAchats: compositionDesAchats,
+    prixUnitaireEffectif: coutTotal / quantiteNecessaire
+  };
+}
+
+/** Repli pour les très grandes quantités : on prend le meilleur prix unitaire, puis on complète. */
+function calculerLAchatParHeuristiqueGloutonne(quantiteNecessaire, lotsUtilisables) {
+  const lotsTriesParPrixUnitaire = lotsUtilisables
+    .slice()
+    .sort((a, b) => (a.prix / a.taille) - (b.prix / b.taille));
+
+  const compositionDesAchats = {};
+  let quantiteRestante = quantiteNecessaire;
+  let coutTotal = 0;
+
+  for (const lot of lotsTriesParPrixUnitaire) {
+    const nombreDeLotsEntiers = Math.floor(quantiteRestante / lot.taille);
+    if (nombreDeLotsEntiers > 0) {
+      compositionDesAchats[lot.taille] = nombreDeLotsEntiers;
+      coutTotal += nombreDeLotsEntiers * lot.prix;
+      quantiteRestante -= nombreDeLotsEntiers * lot.taille;
+    }
+  }
+  if (quantiteRestante > 0) {
+    const lotLePlusPetit = lotsTriesParPrixUnitaire.reduce((a, b) => a.taille < b.taille ? a : b);
+    const nombreDeLotsSupplementaires = Math.ceil(quantiteRestante / lotLePlusPetit.taille);
+    compositionDesAchats[lotLePlusPetit.taille] =
+      (compositionDesAchats[lotLePlusPetit.taille] || 0) + nombreDeLotsSupplementaires;
+    coutTotal += nombreDeLotsSupplementaires * lotLePlusPetit.prix;
+  }
+
+  return {
+    coutTotal: coutTotal,
+    compositionDesAchats: compositionDesAchats,
+    prixUnitaireEffectif: coutTotal / quantiteNecessaire
+  };
+}
+
+/**
+ * Chiffre l'approvisionnement d'une ressource, en choisissant la méthode.
+ *
+ * Ordre de préséance, du plus fiable au moins fiable, et il n'y en a qu'un :
+ *
+ *   1. les prix de lot relevés par Brice, qui autorisent le vrai calcul d'achat
+ *   2. son prix moyen à lui, qui ne donne qu'une estimation linéaire
+ *   3. le prix communautaire, dernier recours pour ne pas afficher un trou
+ *
+ * Le mode d'estimation global court-circuite les lots, mais garde le même
+ * ordre entre prix personnel et prix communautaire : le prix emprunté ne passe
+ * jamais devant un chiffre que Brice a relevé lui-même.
+ *
+ * @param {number} quantiteNecessaire
+ * @param {Object|null} prixEnregistres      fiche de prix personnelle
+ * @param {Object|null} prixCommunautaire    relevé de la base joueurs, unitaire
+ * @returns {{coutTotal:number, prixUnitaireEffectif:number,
+ *            compositionDesAchats:Object|null, methodeDeCalcul:string}|null}
+ */
+function calculerLApprovisionnementDUneRessource(quantiteNecessaire, prixEnregistres, prixCommunautaire) {
+  // Le prix moyen est saisi au lot, tel que le HDV l'affiche. La conversion en
+  // unitaire est centralisée dans `deduireLePrixMoyenUnitaire`, jamais ici.
+  const prixMoyenUnitaire = deduireLePrixMoyenUnitaire(prixEnregistres);
+  const prixParTailleDeLot = prixEnregistres ? prixEnregistres.prixParTailleDeLot : null;
+
+  const estimationParPrixMoyen = {
+    coutTotal: prixMoyenUnitaire * quantiteNecessaire,
+    prixUnitaireEffectif: prixMoyenUnitaire,
+    compositionDesAchats: null,
+    methodeDeCalcul: "prix moyen"
+  };
+
+  const prixCommunautaireUnitaire =
+    prixCommunautaire && prixCommunautaire.prixUnitaire > 0 ? prixCommunautaire.prixUnitaire : 0;
+
+  const estimationParPrixCommunautaire = {
+    coutTotal: prixCommunautaireUnitaire * quantiteNecessaire,
+    prixUnitaireEffectif: prixCommunautaireUnitaire,
+    compositionDesAchats: null,
+    methodeDeCalcul: "prix communautaire"
+  };
+
+  if (etatApplication.modeEstimationParPrixMoyen) {
+    if (prixMoyenUnitaire > 0) return estimationParPrixMoyen;
+    if (prixCommunautaireUnitaire > 0) return estimationParPrixCommunautaire;
+  }
+
+  const achatParLots = calculerLAchatLeMoinsCher(quantiteNecessaire, prixParTailleDeLot);
+  if (achatParLots !== null) {
+    achatParLots.methodeDeCalcul = "lots";
+    return achatParLots;
+  }
+
+  if (prixMoyenUnitaire > 0) return estimationParPrixMoyen;
+  if (prixCommunautaireUnitaire > 0) return estimationParPrixCommunautaire;
+  return null;
+}
+
+/**
+ * Analyse complète de la session : agrège les ressources de toutes les recettes,
+ * chiffre l'achat groupé, puis répartit le coût entre les objets au prorata.
+ */
+function analyserLaSessionComplete() {
+  const tauxDeTaxe = (etatApplication.tauxDeTaxeEnPourcent || 0) / 100;
+
+  // --- Étape 1 : agrégation des besoins en ressources, toutes recettes confondues ---
+  const besoinsAgregesParRessource = {};
+
+  for (const craft of etatApplication.craftsDeLaSession) {
+    const quantiteACrafter = Math.max(0, craft.quantiteACrafter || 0);
+    for (const ingredient of craft.ingredients) {
+      const cle = ingredient.identifiantAnkama;
+      if (!besoinsAgregesParRessource[cle]) {
+        besoinsAgregesParRessource[cle] = {
+          identifiantAnkama: cle,
+          sousType: ingredient.sousType,
+          nom: ingredient.nom,
+          adresseIcone: ingredient.adresseIcone,
+          quantiteTotaleNecessaire: 0
+        };
+      }
+      besoinsAgregesParRessource[cle].quantiteTotaleNecessaire += ingredient.quantiteParCraft * quantiteACrafter;
+    }
+  }
+
+  // --- Étape 2 : chiffrage de l'achat groupé, ressource par ressource ---
+  const lignesDeRessources = [];
+  let coutTotalDesRessources = 0;
+  let nombreDeRessourcesSansPrix = 0;
+
+  for (const cle of Object.keys(besoinsAgregesParRessource)) {
+    const besoin = besoinsAgregesParRessource[cle];
+    const prixEnregistres = etatApplication.basePrixDesRessources[cle];
+    const prixCommunautaire = obtenirLePrixCommunautaire(cle);
+    const achatOptimal = calculerLApprovisionnementDUneRessource(
+      besoin.quantiteTotaleNecessaire,
+      prixEnregistres,
+      prixCommunautaire
+    );
+
+    if (achatOptimal === null) {
+      nombreDeRessourcesSansPrix++;
+    } else {
+      coutTotalDesRessources += achatOptimal.coutTotal;
+    }
+
+    lignesDeRessources.push({
+      besoin: besoin,
+      achatOptimal: achatOptimal,
+      prixCommunautaire: prixCommunautaire,
+      horodatageDerniereMiseAJourDuPrix: prixEnregistres ? prixEnregistres.horodatageDerniereMiseAJour : null
+    });
+  }
+
+  lignesDeRessources.sort((a, b) => a.besoin.nom.localeCompare(b.besoin.nom, "fr"));
+
+  // --- Étape 3 : répartition du coût groupé sur chaque objet, au prorata des quantités ---
+  const coutUnitaireEffectifParRessource = {};
+  for (const ligne of lignesDeRessources) {
+    coutUnitaireEffectifParRessource[ligne.besoin.identifiantAnkama] =
+      ligne.achatOptimal ? ligne.achatOptimal.prixUnitaireEffectif : null;
+  }
+
+  const bilansParCraft = [];
+  let revenuBrutTotal = 0;
+  let taxeTotale = 0;
+  let coutAttribueTotal = 0;
+  let experienceTotaleGagnee = 0;
+
+  for (const craft of etatApplication.craftsDeLaSession) {
+    const quantiteACrafter = Math.max(0, craft.quantiteACrafter || 0);
+
+    let coutDesRessourcesDeCeCraft = 0;
+    let auMoinsUnPrixManquantDansCeCraft = false;
+
+    for (const ingredient of craft.ingredients) {
+      const coutUnitaire = coutUnitaireEffectifParRessource[ingredient.identifiantAnkama];
+      if (coutUnitaire === null || coutUnitaire === undefined) {
+        auMoinsUnPrixManquantDansCeCraft = true;
+      } else {
+        coutDesRessourcesDeCeCraft += coutUnitaire * ingredient.quantiteParCraft * quantiteACrafter;
+      }
+    }
+
+    const revenuBrutDeCeCraft = (craft.prixDeVenteUnitaire || 0) * quantiteACrafter;
+    const taxeDeCeCraft = revenuBrutDeCeCraft * tauxDeTaxe;
+    const profitDeCeCraft = revenuBrutDeCeCraft - taxeDeCeCraft - coutDesRessourcesDeCeCraft;
+    const experienceDeCeCraft = (craft.experienceParCraft || 0) * quantiteACrafter;
+
+    revenuBrutTotal += revenuBrutDeCeCraft;
+    taxeTotale += taxeDeCeCraft;
+    coutAttribueTotal += coutDesRessourcesDeCeCraft;
+    experienceTotaleGagnee += experienceDeCeCraft;
+
+    bilansParCraft.push({
+      identifiantDeLigne: craft.identifiantDeLigne,
+      coutDesRessources: coutDesRessourcesDeCeCraft,
+      coutParObjet: quantiteACrafter > 0 ? coutDesRessourcesDeCeCraft / quantiteACrafter : 0,
+      revenuBrut: revenuBrutDeCeCraft,
+      taxe: taxeDeCeCraft,
+      profitTotal: profitDeCeCraft,
+      profitParObjet: quantiteACrafter > 0 ? profitDeCeCraft / quantiteACrafter : 0,
+      prixDeVenteMinimalPourNePasPerdre:
+        quantiteACrafter > 0 && tauxDeTaxe < 1
+          ? (coutDesRessourcesDeCeCraft / quantiteACrafter) / (1 - tauxDeTaxe)
+          : 0,
+      auMoinsUnPrixManquant: auMoinsUnPrixManquantDansCeCraft
+    });
+  }
+
+  const profitTotalDeLaSession = revenuBrutTotal - taxeTotale - coutAttribueTotal;
+
+  return {
+    lignesDeRessources: lignesDeRessources,
+    bilansParCraft: bilansParCraft,
+    coutTotalDesRessources: coutTotalDesRessources,
+    revenuBrutTotal: revenuBrutTotal,
+    taxeTotale: taxeTotale,
+    profitTotalDeLaSession: profitTotalDeLaSession,
+    experienceTotaleGagnee: experienceTotaleGagnee,
+    nombreDeRessourcesSansPrix: nombreDeRessourcesSansPrix
+  };
+}
+
+/* ============================================================
+   6. AJOUT ET SUPPRESSION DE CRAFTS
+   ============================================================ */
+
+let compteurDIdentifiantsDeLigne = 1;
+
+/**
+ * Ajoute un objet à la session : résout le nom de chacun de ses ingrédients
+ * auprès de l'API, puis enregistre la ligne.
+ */
+async function ajouterUnCraftALaSession(objetRetourneParLApi) {
+  if (!objetRetourneParLApi.recipe || objetRetourneParLApi.recipe.length === 0) {
+    alert("Cet objet n'a pas de recette de craft dans la base.");
+    return;
+  }
+
+  const ingredientsResolus = [];
+  for (const ligneDeRecette of objetRetourneParLApi.recipe) {
+    const informations = await obtenirLesInformationsDUnObjet(
+      ligneDeRecette.item_ankama_id,
+      ligneDeRecette.item_subtype
+    );
+    ingredientsResolus.push({
+      identifiantAnkama: ligneDeRecette.item_ankama_id,
+      sousType: ligneDeRecette.item_subtype,
+      nom: informations.nom,
+      adresseIcone: informations.adresseIcone,
+      quantiteParCraft: ligneDeRecette.quantity
+    });
+  }
+
+  etatApplication.craftsDeLaSession.push({
+    identifiantDeLigne: "ligne-" + (compteurDIdentifiantsDeLigne++) + "-" + objetRetourneParLApi.ankama_id,
+    identifiantAnkama: objetRetourneParLApi.ankama_id,
+    nom: objetRetourneParLApi.name,
+    niveau: objetRetourneParLApi.level,
+    adresseIcone: objetRetourneParLApi.image_urls ? objetRetourneParLApi.image_urls.icon : "",
+    quantiteACrafter: 1,
+    prixDeVenteUnitaire: 0,
+    // Réutilise l'XP déjà relevée pour cette recette lors d'une session précédente.
+    experienceParCraft: etatApplication.memoireExperienceParRecette[objetRetourneParLApi.ankama_id] || 0,
+    ingredients: ingredientsResolus
+  });
+
+  sauvegarderEtatDansLeStockageLocal();
+  redessinerToutLEcran();
+
+  // Les prix communautaires des nouveaux ingrédients arrivent après coup : la
+  // recette s'affiche tout de suite, les repères de prix se posent ensuite.
+  // Volontairement non attendu, pour que l'API de prix ne retarde jamais
+  // l'affichage de la recette.
+  synchroniserLesPrixCommunautairesDeLaSession();
+}
+
+function retirerUnCraftDeLaSession(identifiantDeLigne) {
+  etatApplication.craftsDeLaSession =
+    etatApplication.craftsDeLaSession.filter(craft => craft.identifiantDeLigne !== identifiantDeLigne);
+  sauvegarderEtatDansLeStockageLocal();
+  redessinerToutLEcran();
+}
+
+/* ============================================================
+   7. RECHERCHE AVEC SUGGESTIONS
+   ============================================================ */
+
+const champRechercheRecette = document.getElementById("champRechercheRecette");
+const listeSuggestions = document.getElementById("listeSuggestions");
+let minuteurDeRechercheDifferee = null;
+
+/**
+ * Suggestions actuellement proposées, et celle qui est mise en avant.
+ *
+ * L'index vaut -1 tant qu'aucune flèche n'a été pressée : la première flèche
+ * bas doit atteindre le premier résultat, pas le deuxième. C'est la seule
+ * raison d'être de cette valeur particulière.
+ */
+let suggestionsAffichees = [];
+let indexDeLaSuggestionMiseEnAvant = -1;
+
+champRechercheRecette.addEventListener("input", () => {
+  clearTimeout(minuteurDeRechercheDifferee);
+  const termeSaisi = champRechercheRecette.value.trim();
+
+  if (termeSaisi.length < 3) {
+    viderLesSuggestions();
+    return;
+  }
+
+  // Recherche différée pour ne pas interroger l'API à chaque frappe.
+  minuteurDeRechercheDifferee = setTimeout(async () => {
+    try {
+      const resultats = await rechercherDesEquipementsParNom(termeSaisi);
+      afficherLesSuggestions(resultats);
+    } catch (erreur) {
+      suggestionsAffichees = [];
+      indexDeLaSuggestionMiseEnAvant = -1;
+      listeSuggestions.innerHTML =
+        '<div class="ligne-suggestion"><span class="details">Erreur : ' + erreur.message + "</span></div>";
+    }
+  }, 280);
+});
+
+/* ---- Navigation au clavier ----
+
+   Flèche bas et flèche haut parcourent la liste en boucle, Entrée ajoute la
+   suggestion mise en avant, Échap referme sans rien ajouter. La souris reste
+   pleinement fonctionnelle : survoler une ligne déplace la mise en avant, pour
+   que les deux modes ne se contredisent jamais à l'écran.
+
+   Le parcours en boucle est volontaire : sur huit résultats au plus, revenir
+   au premier après le dernier coûte une pression de touche là où un arrêt en
+   butée en coûterait sept. ---- */
+champRechercheRecette.addEventListener("keydown", (evenement) => {
+  if (suggestionsAffichees.length === 0) return;
+
+  if (evenement.key === "ArrowDown") {
+    evenement.preventDefault();
+    deplacerLaMiseEnAvantDesSuggestions(+1);
+
+  } else if (evenement.key === "ArrowUp") {
+    evenement.preventDefault();
+    deplacerLaMiseEnAvantDesSuggestions(-1);
+
+  } else if (evenement.key === "Enter") {
+    // Sans sélection explicite, Entrée prend le premier résultat : c'est ce que
+    // fait la main quand on tape un nom complet et qu'on valide sans regarder.
+    evenement.preventDefault();
+    const indexRetenu = indexDeLaSuggestionMiseEnAvant >= 0 ? indexDeLaSuggestionMiseEnAvant : 0;
+    retenirLaSuggestion(indexRetenu);
+
+  } else if (evenement.key === "Escape") {
+    evenement.preventDefault();
+    viderLesSuggestions();
+  }
+});
+
+champRechercheRecette.addEventListener("blur", () => {
+  // Délai court pour laisser le clic sur une suggestion se produire avant la fermeture.
+  setTimeout(viderLesSuggestions, 180);
+});
+
+function viderLesSuggestions() {
+  listeSuggestions.innerHTML = "";
+  suggestionsAffichees = [];
+  indexDeLaSuggestionMiseEnAvant = -1;
+}
+
+function deplacerLaMiseEnAvantDesSuggestions(pas) {
+  const nombreDeSuggestions = suggestionsAffichees.length;
+
+  if (pas > 0) {
+    // Depuis l'état « rien de choisi », qui vaut -1, on arrive bien sur 0.
+    indexDeLaSuggestionMiseEnAvant = (indexDeLaSuggestionMiseEnAvant + 1) % nombreDeSuggestions;
+  } else {
+    indexDeLaSuggestionMiseEnAvant = indexDeLaSuggestionMiseEnAvant <= 0
+      ? nombreDeSuggestions - 1
+      : indexDeLaSuggestionMiseEnAvant - 1;
+  }
+
+  appliquerLaMiseEnAvantDesSuggestions();
+}
+
+/**
+ * Reporte la mise en avant sur la bonne ligne et la ramène dans la partie
+ * visible de la liste, qui défile au-delà de quelques résultats.
+ */
+function appliquerLaMiseEnAvantDesSuggestions() {
+  const lignes = listeSuggestions.querySelectorAll(".ligne-suggestion");
+  lignes.forEach((ligne, index) => {
+    const cetteLigneEstMiseEnAvant = index === indexDeLaSuggestionMiseEnAvant;
+    ligne.classList.toggle("survolee", cetteLigneEstMiseEnAvant);
+    if (cetteLigneEstMiseEnAvant) ligne.scrollIntoView({ block: "nearest" });
+  });
+}
+
+async function retenirLaSuggestion(index) {
+  const objetChoisi = suggestionsAffichees[index];
+  if (!objetChoisi) return;
+
+  viderLesSuggestions();
+  champRechercheRecette.value = "";
+  await ajouterUnCraftALaSession(objetChoisi);
+  champRechercheRecette.focus();
+}
+
+function afficherLesSuggestions(resultatsDeLApi) {
+  listeSuggestions.innerHTML = "";
+  indexDeLaSuggestionMiseEnAvant = -1;
+
+  suggestionsAffichees = resultatsDeLApi.filter(objet => objet.recipe && objet.recipe.length > 0);
+
+  if (suggestionsAffichees.length === 0) {
+    listeSuggestions.innerHTML =
+      '<div class="ligne-suggestion"><span class="details">Aucun objet craftable trouvé.</span></div>';
+    return;
+  }
+
+  suggestionsAffichees.forEach((objet, index) => {
+    const elementSuggestion = document.createElement("div");
+    elementSuggestion.className = "ligne-suggestion";
+    elementSuggestion.innerHTML =
+      '<img src="' + (objet.image_urls ? objet.image_urls.icon : "") + '" alt="">' +
+      "<div><div>" + objet.name + "</div>" +
+      '<div class="details">Niveau ' + objet.level + " · " + objet.recipe.length + " ingrédients</div></div>";
+
+    elementSuggestion.addEventListener("mousedown", (evenement) => {
+      evenement.preventDefault();
+      retenirLaSuggestion(index);
+    });
+
+    // Le survol souris et la mise en avant clavier désignent la même ligne,
+    // sinon Entrée validerait une autre ligne que celle qui paraît choisie.
+    elementSuggestion.addEventListener("mouseenter", () => {
+      indexDeLaSuggestionMiseEnAvant = index;
+      appliquerLaMiseEnAvantDesSuggestions();
+    });
+
+    listeSuggestions.appendChild(elementSuggestion);
+  });
+}
+
+/* ============================================================
+   8. RENDU DE L'INTERFACE
+   ============================================================ */
+
+const bandeauResultats = document.getElementById("bandeauResultats");
+const conteneurCrafts = document.getElementById("conteneurCrafts");
+const conteneurRessources = document.getElementById("conteneurRessources");
+
+/**
+ * Redessine l'interface entière, fenêtre flottante comprise si elle est ouverte.
+ *
+ * Point d'entrée unique du rendu : toute modification de l'état passe par ici,
+ * ce qui garantit que les deux fenêtres ne peuvent pas afficher des chiffres
+ * différents.
+ */
+function redessinerToutLEcran() {
+  const analyse = analyserLaSessionComplete();
+  dessinerLeBandeauDeResultats(analyse);
+  dessinerLesCraftsDeLaSession(analyse);
+  dessinerLeTableauDesRessources(analyse);
+
+  if (fenetrePictureInPicture && !fenetrePictureInPicture.closed) {
+    dessinerLaVueCompacteDansLeFenetreFlottante();
+  }
+}
+
+function dessinerLeBandeauDeResultats(analyse) {
+  const classeDuProfit = analyse.profitTotalDeLaSession >= 0 ? "gain" : "perte";
+  const signeDuProfit = analyse.profitTotalDeLaSession >= 0 ? "+" : "";
+
+  let mentionPrixManquants = "";
+  if (analyse.nombreDeRessourcesSansPrix > 0) {
+    mentionPrixManquants =
+      '<div class="precision prix-manquant">' + analyse.nombreDeRessourcesSansPrix +
+      " ressource(s) sans prix, total sous-estimé</div>";
+  }
+
+  let caseExperience = "";
+  if (analyse.experienceTotaleGagnee > 0) {
+    const coutNetParPointDExperience = -analyse.profitTotalDeLaSession / analyse.experienceTotaleGagnee;
+    caseExperience =
+      '<div class="case-resultat"><div class="intitule">Coût par point d\'XP</div>' +
+      '<div class="valeur">' + (coutNetParPointDExperience > 0
+        ? formaterNombreSimple(coutNetParPointDExperience) + " k"
+        : '<span class="gain">gain</span>') + "</div>" +
+      '<div class="precision">' + formaterNombreSimple(analyse.experienceTotaleGagnee) + " XP au total</div></div>";
+  }
+
+  bandeauResultats.innerHTML =
+    '<div class="case-resultat"><div class="intitule">Coût des ressources</div>' +
+      '<div class="valeur">' + formaterMontantEnKamas(analyse.coutTotalDesRessources) + "</div>" +
+      '<div class="precision">à sortir avant de commencer</div>' + mentionPrixManquants + "</div>" +
+
+    '<div class="case-resultat"><div class="intitule">Revenu après taxe</div>' +
+      '<div class="valeur">' + formaterMontantEnKamas(analyse.revenuBrutTotal - analyse.taxeTotale) + "</div>" +
+      '<div class="precision">taxe de ' + formaterMontantEnKamas(analyse.taxeTotale) + " déduite</div></div>" +
+
+    '<div class="case-resultat"><div class="intitule">Résultat de la session</div>' +
+      '<div class="valeur ' + classeDuProfit + '">' + signeDuProfit +
+      formaterMontantEnKamas(analyse.profitTotalDeLaSession) + "</div>" +
+      '<div class="precision">' + etatApplication.craftsDeLaSession.length + " recette(s) en session</div></div>" +
+
+    caseExperience;
+}
+
+function dessinerLesCraftsDeLaSession(analyse) {
+  if (etatApplication.craftsDeLaSession.length === 0) {
+    conteneurCrafts.innerHTML =
+      '<div class="texte-vide">Aucun craft. Tape le nom d\'un objet ci-dessus, les ingrédients arrivent tout seuls.</div>';
+    return;
+  }
+
+  conteneurCrafts.innerHTML = "";
+
+  for (const craft of etatApplication.craftsDeLaSession) {
+    const bilan = analyse.bilansParCraft.find(b => b.identifiantDeLigne === craft.identifiantDeLigne);
+    const classeDuProfit = bilan.profitTotal >= 0 ? "gain" : "perte";
+    const signeDuProfit = bilan.profitTotal >= 0 ? "+" : "";
+
+    const carte = document.createElement("div");
+    carte.className = "carte-craft";
+    carte.innerHTML =
+      '<div class="entete-craft">' +
+        '<img src="' + craft.adresseIcone + '" alt="">' +
+        "<div><div class=\"nom-craft\">" + craft.nom + "</div>" +
+        '<div class="niveau-craft">Niveau ' + craft.niveau + " · " + craft.ingredients.length + " ingrédients</div></div>" +
+        '<button class="bouton-discret" style="margin-left:auto" data-action="supprimer">Retirer</button>' +
+      "</div>" +
+
+      '<div class="grille-champs-craft">' +
+        '<div class="champ-etiquete"><label class="etiquette">Quantité</label>' +
+          '<input data-champ="quantiteACrafter" value="' + craft.quantiteACrafter + '"></div>' +
+        '<div class="champ-etiquete"><label class="etiquette">Prix de vente unitaire</label>' +
+          '<input data-champ="prixDeVenteUnitaire" value="' +
+            (craft.prixDeVenteUnitaire ? formaterNombreSimple(craft.prixDeVenteUnitaire) : "") + '" placeholder="ex. 45k"></div>' +
+        '<div class="champ-etiquete"><label class="etiquette">XP par craft à ton niveau</label>' +
+          '<input data-champ="experienceParCraft" value="' +
+            (craft.experienceParCraft ? craft.experienceParCraft : "") + '" placeholder="ex. 1618"></div>' +
+      "</div>" +
+
+      '<div class="bilan-ligne">' +
+        "<span>Coût par objet <strong>" + formaterMontantEnKamas(bilan.coutParObjet) + "</strong></span>" +
+        "<span>Profit par objet <strong class=\"" + classeDuProfit + "\">" + signeDuProfit +
+          formaterMontantEnKamas(bilan.profitParObjet) + "</strong></span>" +
+        "<span>Total ligne <strong class=\"" + classeDuProfit + "\">" + signeDuProfit +
+          formaterMontantEnKamas(bilan.profitTotal) + "</strong></span>" +
+        '<span class="attenue">Seuil de revente ' + formaterMontantEnKamas(bilan.prixDeVenteMinimalPourNePasPerdre) + "</span>" +
+        (bilan.auMoinsUnPrixManquant ? '<span class="prix-manquant">prix de ressource manquant</span>' : "") +
+      "</div>";
+
+    // Bouton de suppression.
+    carte.querySelector('[data-action="supprimer"]').addEventListener("click", () => {
+      retirerUnCraftDeLaSession(craft.identifiantDeLigne);
+    });
+
+    // Champs modifiables de la ligne.
+    for (const champ of carte.querySelectorAll("[data-champ]")) {
+      champ.addEventListener("change", () => {
+        const nomDuChamp = champ.getAttribute("data-champ");
+        const valeurInterpretee = interpreterSaisieDeMontant(champ.value);
+        craft[nomDuChamp] = valeurInterpretee;
+
+        // L'XP relevée est mémorisée pour que la recette revienne pré-remplie.
+        // Elle dépend du niveau de métier, donc elle est à corriger après chaque
+        // montée de niveau : c'est signalé en pied de page.
+        if (nomDuChamp === "experienceParCraft") {
+          etatApplication.memoireExperienceParRecette[craft.identifiantAnkama] = valeurInterpretee;
+        }
+        sauvegarderEtatDansLeStockageLocal();
+        redessinerToutLEcran();
+      });
+    }
+
+    conteneurCrafts.appendChild(carte);
+  }
+}
+
+/* ---- Fabriques de cellules de prix, partagées par les deux fenêtres ----
+
+   La fenêtre principale et la fenêtre PIP affichent les mêmes champs de prix,
+   à quelques colonnes près. Les fabriquer ici plutôt que deux fois évite la
+   dérive silencieuse où une règle d'affichage n'est corrigée que d'un côté.
+   ---- */
+
+/**
+ * Cellule du prix moyen : le montant du lot tel que le HDV l'affiche, et la
+ * taille du lot sur lequel il a été relevé. L'unitaire n'est jamais saisi.
+ *
+ * Quand aucun prix moyen personnel n'existe mais qu'un prix communautaire est
+ * connu, ce dernier s'affiche en repère, en pointillés bleus, à la place du
+ * texte de remplacement habituel. Il reste un texte de remplacement et non une
+ * valeur : le champ est vide, donc rien n'est enregistré au nom de Brice, et la
+ * première frappe part d'un champ propre.
+ */
+function construireLaCelluleDuPrixMoyen(ligne) {
+  const fichePrix = etatApplication.basePrixDesRessources[ligne.besoin.identifiantAnkama];
+
+  const prixMoyenDuLotEnregistre = fichePrix ? (fichePrix.prixMoyenDuLot || 0) : 0;
+  const tailleDuLotDuPrixMoyen = (fichePrix && fichePrix.tailleDuLotDuPrixMoyen)
+    || TAILLE_DE_LOT_PAR_DEFAUT_POUR_LE_PRIX_MOYEN;
+  const prixMoyenUnitaireDeduit = deduireLePrixMoyenUnitaire(fichePrix);
+
+  const leCoutVientDuPrixMoyen =
+    ligne.achatOptimal && ligne.achatOptimal.methodeDeCalcul === "prix moyen";
+  const optionsDeTailleDeLot = TAILLES_DE_LOT_DISPONIBLES
+    .map(taille => '<option value="' + taille + '"'
+      + (taille === tailleDuLotDuPrixMoyen ? " selected" : "") + ">×" + taille + "</option>")
+    .join("");
+
+  // Le repère communautaire n'apparaît que si le champ est vide : dès que Brice
+  // a saisi quelque chose, son chiffre occupe la place, sans concurrence.
+  const proposerLeRepereCommunautaire = prixMoyenDuLotEnregistre <= 0 && ligne.prixCommunautaire;
+  const texteDeRemplacement = proposerLeRepereCommunautaire
+    ? formaterNombreSimple(ligne.prixCommunautaire.prixUnitaire)
+    : "–";
+
+  const infoBulle = prixMoyenUnitaireDeduit > 0
+    ? ' title="soit ' + formaterNombreSimple(prixMoyenUnitaireDeduit) + ' kamas l\'unité"'
+    : (proposerLeRepereCommunautaire
+        ? ' title="Prix communautaire ' + NOM_DU_SERVEUR_SUIVI
+          + ', affiché en repère. Saisis le tien pour le remplacer."'
+        : "");
+
+  // Le vert « retenu » est réservé aux prix relevés par Brice. Un coût assis sur
+  // le prix communautaire se signale par ses pointillés bleus et sa pastille,
+  // jamais par le vert : les deux signaux ne doivent pas se superposer, sinon
+  // « ce chiffre est le mien et il est retenu » devient illisible.
+  const classesDuChamp = "champ-prix-lot"
+    + (leCoutVientDuPrixMoyen ? " lot-retenu" : "")
+    + (proposerLeRepereCommunautaire ? " attend-un-prix-communautaire" : "");
+
+  return '<td><div class="cellule-prix-moyen"' + infoBulle + ">"
+    + '<input class="' + classesDuChamp + '" data-prix-moyen="oui" value="'
+    + (prixMoyenDuLotEnregistre ? formaterNombreSimple(prixMoyenDuLotEnregistre) : "")
+    + '" placeholder="' + texteDeRemplacement + '">'
+    + '<select class="selecteur-taille-lot" data-taille-du-prix-moyen="oui">'
+    + optionsDeTailleDeLot + "</select>"
+    + "</div></td>";
+}
+
+/** Les quatre cellules de prix de lot, allumées selon la recommandation d'achat. */
+function construireLesCellulesDesPrixDeLot(ligne) {
+  const fichePrix = etatApplication.basePrixDesRessources[ligne.besoin.identifiantAnkama];
+  const prixParTailleDeLot = fichePrix ? (fichePrix.prixParTailleDeLot || {}) : {};
+
+  const leCalculPorteSurDesLots =
+    ligne.achatOptimal && ligne.achatOptimal.methodeDeCalcul === "lots";
+  const compositionRetenue =
+    (ligne.achatOptimal && ligne.achatOptimal.compositionDesAchats) || {};
+
+  let cellules = "";
+  for (const taille of TAILLES_DE_LOT_DISPONIBLES) {
+    const prixDeCeLot = prixParTailleDeLot[taille] || 0;
+    const ceLotEstRetenu = leCalculPorteSurDesLots && compositionRetenue[taille] > 0;
+    cellules += '<td><input class="champ-prix-lot' + (ceLotEstRetenu ? " lot-retenu" : "")
+      + '" data-taille-de-lot="' + taille + '" value="'
+      + (prixDeCeLot ? formaterNombreSimple(prixDeCeLot) : "") + '" placeholder="–"></td>';
+  }
+  return cellules;
+}
+
+/**
+ * Branche l'enregistrement des saisies de prix d'une rangée, quelle que soit la
+ * fenêtre où elle est dessinée. Une saisie faite ici redessine les deux fenêtres.
+ */
+function brancherLesSaisiesDePrixDUneRangee(rangee, identifiantAnkama, nomDeLaRessource) {
+  const controles = rangee.querySelectorAll(
+    "[data-taille-de-lot], [data-prix-moyen], [data-taille-du-prix-moyen]");
+
+  for (const controle of controles) {
+    controle.addEventListener("change", () => {
+      const fichePrix = obtenirOuCreerLaFichePrixDUneRessource(identifiantAnkama, nomDeLaRessource);
+
+      if (controle.hasAttribute("data-taille-du-prix-moyen")) {
+        // Changer la taille du lot ne change pas le montant saisi : c'est bien
+        // le même prix relevé, réinterprété sur un autre lot. Le coût estimé
+        // bouge donc, ce qui est le comportement voulu.
+        fichePrix.tailleDuLotDuPrixMoyen = parseInt(controle.value, 10);
+      } else if (controle.hasAttribute("data-prix-moyen")) {
+        fichePrix.prixMoyenDuLot = interpreterSaisieDeMontant(controle.value);
+      } else {
+        const tailleDeLot = parseInt(controle.getAttribute("data-taille-de-lot"), 10);
+        fichePrix.prixParTailleDeLot[tailleDeLot] = interpreterSaisieDeMontant(controle.value);
+      }
+
+      fichePrix.horodatageDerniereMiseAJour = Date.now();
+      sauvegarderEtatDansLeStockageLocal();
+      redessinerToutLEcran();
+    });
+  }
+}
+
+function dessinerLeTableauDesRessources(analyse) {
+  if (analyse.lignesDeRessources.length === 0) {
+    conteneurRessources.innerHTML =
+      '<div class="texte-vide">Les ressources apparaîtront ici dès qu\'un craft sera ajouté.</div>';
+    return;
+  }
+
+  const tableau = document.createElement("table");
+  tableau.className = "tableau-ressources";
+  tableau.innerHTML =
+    "<thead><tr>" +
+      "<th>Ressource</th><th class=\"colonne-chiffre\">Qté</th>" +
+      "<th>Prix moyen</th>" +
+      "<th>×1</th><th>×10</th><th>×100</th><th>×1000</th>" +
+      "<th>À acheter</th><th class=\"colonne-chiffre\">Coût</th>" +
+    "</tr></thead><tbody></tbody>";
+
+  const corpsDuTableau = tableau.querySelector("tbody");
+
+  for (const ligne of analyse.lignesDeRessources) {
+    const identifiant = ligne.besoin.identifiantAnkama;
+
+    const leCoutVientDuPrixMoyen =
+      ligne.achatOptimal && ligne.achatOptimal.methodeDeCalcul === "prix moyen";
+    const leCoutVientDuPrixCommunautaire =
+      ligne.achatOptimal && ligne.achatOptimal.methodeDeCalcul === "prix communautaire";
+
+    const rangee = document.createElement("tr");
+
+    // Formulation lisible du panier, par exemple « 2 × 100 + 3 × 10 + 4 × 1 ».
+    let descriptionDuPanier = '<span class="prix-manquant">prix à saisir</span>';
+    let cellulesDuCout = '<td class="colonne-chiffre attenue">–</td>';
+
+    if (leCoutVientDuPrixMoyen || leCoutVientDuPrixCommunautaire) {
+      // En estimation, on n'annonce pas de panier : aucun lot n'est réellement
+      // recommandé, l'unitaire n'est qu'un ordre de grandeur. On affiche donc
+      // le calcul brut, quantité multipliée par l'unitaire retenu. Formuler
+      // cela en nombre de lots donnerait des « 0,06 lot de 100 », qui se lisent
+      // comme un conseil d'achat alors que ce n'en est pas un.
+      const mentionDeLOrigine = leCoutVientDuPrixCommunautaire
+        ? "communautaire " + NOM_DU_SERVEUR_SUIVI
+        : "estimation";
+
+      descriptionDuPanier =
+        '<span class="mention-composition">' +
+        formaterNombreSimple(ligne.besoin.quantiteTotaleNecessaire) + " × " +
+        formaterNombreSimple(ligne.achatOptimal.prixUnitaireEffectif) + "/u" +
+        ' <span class="attenue">(' + mentionDeLOrigine + ")</span></span>";
+      cellulesDuCout = '<td class="colonne-chiffre attenue">' +
+        formaterMontantEnKamas(ligne.achatOptimal.coutTotal) + "</td>";
+
+    } else if (ligne.achatOptimal) {
+      const morceauxDeDescription = TAILLES_DE_LOT_DISPONIBLES
+        .slice().sort((a, b) => b - a)
+        .filter(taille => ligne.achatOptimal.compositionDesAchats[taille])
+        .map(taille => ligne.achatOptimal.compositionDesAchats[taille] + " × " + taille);
+
+      const quantiteEffectivementAchetee = TAILLES_DE_LOT_DISPONIBLES
+        .reduce((somme, taille) => somme + (ligne.achatOptimal.compositionDesAchats[taille] || 0) * taille, 0);
+      const surplusAchete = quantiteEffectivementAchetee - ligne.besoin.quantiteTotaleNecessaire;
+
+      descriptionDuPanier =
+        '<span class="mention-composition">' + morceauxDeDescription.join(" + ") +
+        (surplusAchete > 0 ? ' <span class="attenue">(+' + surplusAchete + " en trop)</span>" : "") + "</span>";
+
+      cellulesDuCout = '<td class="colonne-chiffre">' + formaterMontantEnKamas(ligne.achatOptimal.coutTotal) + "</td>";
+    }
+
+    // Deux signalements distincts à côté du nom, jamais les deux à la fois :
+    // soit le chiffre affiché est celui de Brice et c'est son âge qui compte,
+    // soit il est emprunté et c'est son origine qui compte d'abord.
+    let mentionAcoteDuNom = "";
+    if (leCoutVientDuPrixCommunautaire) {
+      mentionAcoteDuNom = construireLaMarqueDePrixCommunautaire(ligne.prixCommunautaire);
+    } else {
+      const ageDuPrixEnJours = calculerAgeEnJoursDepuis(ligne.horodatageDerniereMiseAJourDuPrix);
+      if (ageDuPrixEnJours !== null && ageDuPrixEnJours >= NOMBRE_DE_JOURS_AVANT_PRIX_CONSIDERE_ANCIEN) {
+        mentionAcoteDuNom = ' <span class="prix-ancien" title="Prix saisi il y a '
+          + ageDuPrixEnJours + ' jours">⚠ ' + ageDuPrixEnJours + " j</span>";
+      }
+    }
+
+    rangee.innerHTML =
+      '<td class="colonne-nom"><div class="cellule-nom-ressource">' +
+        '<img src="' + ligne.besoin.adresseIcone + '" alt="">' +
+        "<span>" + ligne.besoin.nom + mentionAcoteDuNom + "</span></div></td>" +
+      '<td class="colonne-chiffre">' + formaterNombreSimple(ligne.besoin.quantiteTotaleNecessaire) + "</td>" +
+      construireLaCelluleDuPrixMoyen(ligne) +
+      construireLesCellulesDesPrixDeLot(ligne) +
+      "<td>" + descriptionDuPanier + "</td>" +
+      cellulesDuCout;
+
+    brancherLesSaisiesDePrixDUneRangee(rangee, identifiant, ligne.besoin.nom);
+
+    corpsDuTableau.appendChild(rangee);
+  }
+
+  conteneurRessources.innerHTML = "";
+  conteneurRessources.appendChild(tableau);
+}
+
+/* ============================================================
+   8 bis. REVUE DE REVALIDATION DES PRIX ANCIENS
+
+   Passe en revue, une ressource à la fois et en plein écran, les prix de la
+   session qui ont dépassé le seuil d'ancienneté. Conçue pour être menée au
+   clavier seul, sans quitter le HDV des yeux plus que nécessaire :
+
+     Entrée  valide la ressource et passe à la suivante
+     Échap   ferme la revue, ce qui a déjà été validé reste validé
+
+   Confirmer un prix sans le modifier rafraîchit quand même son horodatage :
+   c'est l'acte de dire « j'ai regardé, il est toujours bon ».
+   ============================================================ */
+
+/**
+ * File des ressources restant à revoir dans la revue en cours.
+ * Tableau vide et `revueEnCours` à faux quand aucune revue n'est ouverte.
+ */
+let fileDesRessourcesARevoir = [];
+let indexDeLaRessourceEnCoursDeRevue = 0;
+let revueEnCours = false;
+let elementVoileDeLaRevue = null;
+
+/**
+ * Construit la liste des ressources de la session dont le prix mérite un
+ * nouveau coup d'oeil : soit jamais renseigné, soit relevé il y a trop
+ * longtemps. Les ressources dont le prix est frais ne sont pas proposées.
+ */
+function etablirLaListeDesRessourcesARevoir() {
+  const analyse = analyserLaSessionComplete();
+
+  return analyse.lignesDeRessources.filter(ligne => {
+    const fichePrix = etatApplication.basePrixDesRessources[ligne.besoin.identifiantAnkama];
+    if (!fichePrix) return true;
+
+    const aucunPrixConnu = deduireLePrixMoyenUnitaire(fichePrix) === 0
+      && TAILLES_DE_LOT_DISPONIBLES.every(taille => !(fichePrix.prixParTailleDeLot || {})[taille]);
+    if (aucunPrixConnu) return true;
+
+    const ageEnJours = calculerAgeEnJoursDepuis(fichePrix.horodatageDerniereMiseAJour);
+    return ageEnJours === null || ageEnJours >= NOMBRE_DE_JOURS_AVANT_PRIX_CONSIDERE_ANCIEN;
+  });
+}
+
+function ouvrirLaRevueDeRevalidation() {
+  fileDesRessourcesARevoir = etablirLaListeDesRessourcesARevoir();
+
+  if (fileDesRessourcesARevoir.length === 0) {
+    alert("Tous les prix de la session sont récents, rien à revérifier.");
+    return;
+  }
+
+  indexDeLaRessourceEnCoursDeRevue = 0;
+  revueEnCours = true;
+
+  elementVoileDeLaRevue = document.createElement("div");
+  elementVoileDeLaRevue.className = "voile-revue";
+  document.body.appendChild(elementVoileDeLaRevue);
+  document.addEventListener("keydown", gererLesTouchesDeLaRevue);
+
+  dessinerLEtapeCouranteDeLaRevue();
+}
+
+function fermerLaRevueDeRevalidation() {
+  revueEnCours = false;
+  document.removeEventListener("keydown", gererLesTouchesDeLaRevue);
+  if (elementVoileDeLaRevue) {
+    elementVoileDeLaRevue.remove();
+    elementVoileDeLaRevue = null;
+  }
+  redessinerToutLEcran();
+}
+
+function gererLesTouchesDeLaRevue(evenement) {
+  if (!revueEnCours) return;
+
+  if (evenement.key === "Escape") {
+    evenement.preventDefault();
+    fermerLaRevueDeRevalidation();
+
+  } else if (evenement.key === "Enter") {
+    evenement.preventDefault();
+    validerLEtapeCouranteDeLaRevueEtPasserALaSuivante();
+  }
+}
+
+function dessinerLEtapeCouranteDeLaRevue() {
+  const ligneEnCours = fileDesRessourcesARevoir[indexDeLaRessourceEnCoursDeRevue];
+  const identifiant = ligneEnCours.besoin.identifiantAnkama;
+  const fichePrix = etatApplication.basePrixDesRessources[identifiant];
+
+  const prixMoyenDuLot = fichePrix ? (fichePrix.prixMoyenDuLot || 0) : 0;
+  const tailleDuLotDuPrixMoyen = (fichePrix && fichePrix.tailleDuLotDuPrixMoyen)
+    || TAILLE_DE_LOT_PAR_DEFAUT_POUR_LE_PRIX_MOYEN;
+
+  // Le prix communautaire sert de repère de saisie, jamais de valeur validée :
+  // valider la revue sur un champ vide n'enregistre rien, comme avant.
+  const prixCommunautaire = obtenirLePrixCommunautaire(identifiant);
+  const repereCommunautaire = prixMoyenDuLot <= 0 && prixCommunautaire
+    ? formaterNombreSimple(prixCommunautaire.prixUnitaire) : "–";
+
+  const ageEnJours = calculerAgeEnJoursDepuis(
+    fichePrix ? fichePrix.horodatageDerniereMiseAJour : null);
+  const mentionDeLAge = ageEnJours === null
+    ? "jamais renseigné"
+    : "relevé il y a " + ageEnJours + " jour(s)";
+
+  const optionsDeTailleDeLot = TAILLES_DE_LOT_DISPONIBLES
+    .map(taille => '<option value="' + taille + '"'
+      + (taille === tailleDuLotDuPrixMoyen ? " selected" : "") + ">×" + taille + "</option>")
+    .join("");
+
+  let champsDesLots = "";
+  for (const taille of TAILLES_DE_LOT_DISPONIBLES) {
+    const prixDeCeLot = (fichePrix && fichePrix.prixParTailleDeLot)
+      ? (fichePrix.prixParTailleDeLot[taille] || 0) : 0;
+    champsDesLots +=
+      '<div class="champ-etiquete champ-revue"><label class="etiquette">Lot de ' + taille + "</label>" +
+      '<input data-revue-taille-de-lot="' + taille + '" value="' +
+      (prixDeCeLot ? formaterNombreSimple(prixDeCeLot) : "") + '" placeholder="–"></div>';
+  }
+
+  elementVoileDeLaRevue.innerHTML =
+    '<div class="carte-revue">' +
+      '<div class="avancement">Revue des prix · ' + (indexDeLaRessourceEnCoursDeRevue + 1) +
+        " sur " + fileDesRessourcesARevoir.length + "</div>" +
+
+      '<div class="identite-ressource">' +
+        '<img src="' + ligneEnCours.besoin.adresseIcone + '" alt="">' +
+        "<div><div class=\"nom-ressource-revue\">" + ligneEnCours.besoin.nom + "</div>" +
+        '<div class="attenue" style="font-size:11px">' +
+          formaterNombreSimple(ligneEnCours.besoin.quantiteTotaleNecessaire) +
+          " nécessaires · " + mentionDeLAge +
+          (prixCommunautaire ? construireLaMarqueDePrixCommunautaire(prixCommunautaire) : "") +
+          "</div></div>" +
+      "</div>" +
+
+      '<div class="grille-champs-revue">' +
+        '<div class="champ-etiquete champ-revue"><label class="etiquette">Prix moyen du lot</label>' +
+          '<div class="cellule-prix-moyen">' +
+            '<input data-revue-prix-moyen="oui" class="' +
+              (repereCommunautaire !== "–" ? "attend-un-prix-communautaire" : "") + '" value="' +
+              (prixMoyenDuLot ? formaterNombreSimple(prixMoyenDuLot) : "") +
+              '" placeholder="' + repereCommunautaire + '">' +
+            '<select class="selecteur-taille-lot" data-revue-taille-du-prix-moyen="oui">' +
+              optionsDeTailleDeLot + "</select>" +
+          "</div></div>" +
+        champsDesLots +
+      "</div>" +
+
+      '<div class="aide-clavier"><kbd>Entrée</kbd> valider et passer au suivant · ' +
+        "<kbd>Tab</kbd> champ suivant · <kbd>Échap</kbd> fermer la revue</div>" +
+    "</div>";
+
+  // Le premier champ prend le focus pour que la frappe démarre sans souris.
+  const premierChamp = elementVoileDeLaRevue.querySelector("input");
+  if (premierChamp) {
+    premierChamp.focus();
+    premierChamp.select();
+  }
+}
+
+/**
+ * Enregistre ce qui a été saisi pour la ressource affichée, rafraîchit son
+ * horodatage, puis avance dans la file. Ferme la revue une fois la file épuisée.
+ */
+function validerLEtapeCouranteDeLaRevueEtPasserALaSuivante() {
+  const ligneEnCours = fileDesRessourcesARevoir[indexDeLaRessourceEnCoursDeRevue];
+  const fichePrix = obtenirOuCreerLaFichePrixDUneRessource(
+    ligneEnCours.besoin.identifiantAnkama, ligneEnCours.besoin.nom);
+
+  const champDuPrixMoyen = elementVoileDeLaRevue.querySelector("[data-revue-prix-moyen]");
+  fichePrix.prixMoyenDuLot = interpreterSaisieDeMontant(champDuPrixMoyen.value);
+
+  const selecteurDeTaille = elementVoileDeLaRevue.querySelector("[data-revue-taille-du-prix-moyen]");
+  fichePrix.tailleDuLotDuPrixMoyen = parseInt(selecteurDeTaille.value, 10);
+
+  for (const champDeLot of elementVoileDeLaRevue.querySelectorAll("[data-revue-taille-de-lot]")) {
+    const taille = parseInt(champDeLot.getAttribute("data-revue-taille-de-lot"), 10);
+    fichePrix.prixParTailleDeLot[taille] = interpreterSaisieDeMontant(champDeLot.value);
+  }
+
+  // Confirmer sans rien changer reste un acte de vérification : l'horodatage
+  // est rafraîchi dans tous les cas, sinon la ressource reviendrait à la
+  // prochaine revue alors qu'elle vient d'être contrôlée.
+  fichePrix.horodatageDerniereMiseAJour = Date.now();
+  sauvegarderEtatDansLeStockageLocal();
+
+  indexDeLaRessourceEnCoursDeRevue++;
+  if (indexDeLaRessourceEnCoursDeRevue >= fileDesRessourcesARevoir.length) {
+    fermerLaRevueDeRevalidation();
+    return;
+  }
+  dessinerLEtapeCouranteDeLaRevue();
+}
+
+/* ============================================================
+   9. RÉGLAGES, EXPORT ET IMPORT
+   ============================================================ */
+
+const champTauxDeTaxe = document.getElementById("champTauxDeTaxe");
+
+const caseModePrixMoyen = document.getElementById("caseModePrixMoyen");
+
+caseModePrixMoyen.addEventListener("change", () => {
+  etatApplication.modeEstimationParPrixMoyen = caseModePrixMoyen.checked;
+  sauvegarderEtatDansLeStockageLocal();
+  redessinerToutLEcran();
+});
+
+champTauxDeTaxe.addEventListener("change", () => {
+  const tauxSaisi = parseFloat(String(champTauxDeTaxe.value).replace(",", "."));
+  etatApplication.tauxDeTaxeEnPourcent = isNaN(tauxSaisi) ? 0 : tauxSaisi;
+  sauvegarderEtatDansLeStockageLocal();
+  redessinerToutLEcran();
+});
+
+document.getElementById("boutonRevoirLesPrix").addEventListener("click", ouvrirLaRevueDeRevalidation);
+
+document.getElementById("boutonSynchroniserLesPrixCommunautaires")
+  .addEventListener("click", synchroniserLesPrixCommunautairesDeLaSession);
+
+document.getElementById("boutonPictureInPicture").addEventListener("click", ouvrirOuFermerLaFenetreFlottante);
+
+document.getElementById("boutonExporter").addEventListener("click", () => {
+  const contenu = JSON.stringify(etatApplication, null, 2);
+  const lienDeTelechargement = document.createElement("a");
+  lienDeTelechargement.href = URL.createObjectURL(new Blob([contenu], { type: "application/json" }));
+  lienDeTelechargement.download = "calculateur-craft-dofus-sauvegarde.json";
+  lienDeTelechargement.click();
+});
+
+document.getElementById("boutonImporter").addEventListener("click", () => {
+  const champDeFichier = document.createElement("input");
+  champDeFichier.type = "file";
+  champDeFichier.accept = "application/json";
+  champDeFichier.addEventListener("change", async () => {
+    const fichierChoisi = champDeFichier.files[0];
+    if (!fichierChoisi) return;
+    try {
+      const etatImporte = JSON.parse(await fichierChoisi.text());
+      etatApplication = Object.assign(etatApplication, etatImporte);
+      // Un fichier exporté par une version antérieure porte l'ancien format :
+      // sans cette migration, ses prix moyens seraient lus comme des prix de lot
+      // manquants, donc silencieusement ignorés.
+      migrerLEtatVersLeSchemaCourant();
+      champTauxDeTaxe.value = etatApplication.tauxDeTaxeEnPourcent;
+      sauvegarderEtatDansLeStockageLocal();
+      redessinerToutLEcran();
+    } catch (erreur) {
+      alert("Fichier illisible : " + erreur.message);
+    }
+  });
+  champDeFichier.click();
+});
+
+document.getElementById("boutonViderSession").addEventListener("click", () => {
+  if (!confirm("Vider la liste des crafts ? Les prix des ressources, eux, sont conservés.")) return;
+  etatApplication.craftsDeLaSession = [];
+  sauvegarderEtatDansLeStockageLocal();
+  redessinerToutLEcran();
+});
+
+/* ============================================================
+   9 bis. FENÊTRE FLOTTANTE, MODE PIP
+
+   Ouvre une fenêtre compacte qui reste au premier plan pendant que le jeu est
+   affiché en plein écran. Elle contient le bandeau de résultats et les prix des
+   ressources, rien d'autre : la recherche de recette et les réglages restent
+   dans la fenêtre principale, ils ne servent pas pendant qu'on est au HDV.
+
+   Principe structurel : ce n'est pas un clone. Les deux fenêtres partagent le
+   même objet `etatApplication` et les mêmes fonctions de calcul, parce que la
+   fenêtre PIP est un document du même contexte JavaScript. Une saisie faite
+   dans le PIP est écrite en base et redessine les deux fenêtres, et l'inverse.
+
+   Disponibilité : l'API Document Picture-in-Picture est présente sur Chrome,
+   Edge, et sur Firefox depuis la version 151, donc sur Zen. Si elle manque, on
+   se rabat sur une simple popup, qui n'a pas le premier plan garanti mais vaut
+   mieux qu'un bouton mort.
+   ============================================================ */
+
+const LARGEUR_INITIALE_DE_LA_FENETRE_PIP = 460;
+const HAUTEUR_INITIALE_DE_LA_FENETRE_PIP = 520;
+
+/** Fenêtre flottante ouverte, ou null. Sert à éviter d'en ouvrir deux. */
+let fenetrePictureInPicture = null;
+
+function lAPIDocumentPictureInPictureEstDisponible() {
+  return typeof window.documentPictureInPicture !== "undefined"
+    && typeof window.documentPictureInPicture.requestWindow === "function";
+}
+
+async function ouvrirOuFermerLaFenetreFlottante() {
+  // Bascule : un second clic referme la fenêtre déjà ouverte.
+  if (fenetrePictureInPicture && !fenetrePictureInPicture.closed) {
+    fenetrePictureInPicture.close();
+    fenetrePictureInPicture = null;
+    return;
+  }
+
+  try {
+    if (lAPIDocumentPictureInPictureEstDisponible()) {
+      fenetrePictureInPicture = await window.documentPictureInPicture.requestWindow({
+        width: LARGEUR_INITIALE_DE_LA_FENETRE_PIP,
+        height: HAUTEUR_INITIALE_DE_LA_FENETRE_PIP
+      });
+    } else {
+      // Repli sans premier plan garanti. Le reste du code est identique,
+      // puisque `window.open` rend aussi un objet Window utilisable.
+      fenetrePictureInPicture = window.open("", "calculateur-craft-pip",
+        "width=" + LARGEUR_INITIALE_DE_LA_FENETRE_PIP +
+        ",height=" + HAUTEUR_INITIALE_DE_LA_FENETRE_PIP + ",menubar=no,toolbar=no");
+
+      if (!fenetrePictureInPicture) {
+        alert("La fenêtre flottante a été bloquée par le navigateur. "
+          + "Autorise les popups pour cette page.");
+        return;
+      }
+    }
+  } catch (erreur) {
+    console.warn("Ouverture de la fenêtre flottante impossible :", erreur);
+    alert("Fenêtre flottante indisponible : " + erreur.message);
+    return;
+  }
+
+  preparerLeDocumentDeLaFenetreFlottante();
+  dessinerLaVueCompacteDansLeFenetreFlottante();
+
+  fenetrePictureInPicture.addEventListener("pagehide", () => {
+    fenetrePictureInPicture = null;
+    mettreAJourLIntituleDuBoutonPictureInPicture();
+  });
+
+  mettreAJourLIntituleDuBoutonPictureInPicture();
+}
+
+/**
+ * Copie la feuille de style de la page principale dans le document flottant et
+ * y installe le conteneur de la vue compacte.
+ *
+ * La fenêtre PIP démarre sur un document vide, sans aucun style hérité : sans
+ * cette copie, la vue compacte s'afficherait en Times New Roman sur fond blanc.
+ */
+function preparerLeDocumentDeLaFenetreFlottante() {
+  const documentFlottant = fenetrePictureInPicture.document;
+
+  documentFlottant.head.innerHTML = "";
+  for (const feuilleDeStyle of document.styleSheets) {
+    try {
+      const reglesConcatenees = Array.from(feuilleDeStyle.cssRules)
+        .map(regle => regle.cssText).join("\n");
+      const elementDeStyle = documentFlottant.createElement("style");
+      elementDeStyle.textContent = reglesConcatenees;
+      documentFlottant.head.appendChild(elementDeStyle);
+    } catch (erreur) {
+      // Une feuille de style d'origine étrangère refuse la lecture de ses
+      // règles. Sans objet ici, tout le style étant embarqué dans le fichier.
+      console.debug("Feuille de style non copiable, ignorée :", erreur);
+    }
+  }
+
+  const titreDuDocumentFlottant = documentFlottant.createElement("title");
+  titreDuDocumentFlottant.textContent = "Calculateur de craft";
+  documentFlottant.head.appendChild(titreDuDocumentFlottant);
+
+  documentFlottant.body.innerHTML =
+    '<div id="bandeauResultatsCompact" class="bandeau-resultats"></div>' +
+    '<div id="conteneurRessourcesCompact"></div>';
+  documentFlottant.body.style.padding = "10px";
+}
+
+/**
+ * Dessine la vue compacte : bandeau de résultats, puis un tableau de ressources
+ * réduit aux colonnes utiles quand on est devant le HDV. Les champs de prix y
+ * sont pleinement modifiables, c'est tout l'intérêt d'avoir la fenêtre devant
+ * le jeu.
+ */
+function dessinerLaVueCompacteDansLeFenetreFlottante() {
+  if (!fenetrePictureInPicture || fenetrePictureInPicture.closed) return;
+
+  const documentFlottant = fenetrePictureInPicture.document;
+  const analyse = analyserLaSessionComplete();
+
+  // --- Bandeau de résultats, réduit à deux chiffres ---
+  const classeDuProfit = analyse.profitTotalDeLaSession >= 0 ? "gain" : "perte";
+  const signeDuProfit = analyse.profitTotalDeLaSession >= 0 ? "+" : "";
+
+  documentFlottant.getElementById("bandeauResultatsCompact").innerHTML =
+    '<div class="case-resultat"><div class="intitule">Coût des ressources</div>' +
+      '<div class="valeur">' + formaterMontantEnKamas(analyse.coutTotalDesRessources) + "</div>" +
+      (analyse.nombreDeRessourcesSansPrix > 0
+        ? '<div class="precision prix-manquant">' + analyse.nombreDeRessourcesSansPrix +
+          " sans prix</div>"
+        : "") + "</div>" +
+    '<div class="case-resultat"><div class="intitule">Résultat</div>' +
+      '<div class="valeur ' + classeDuProfit + '">' + signeDuProfit +
+      formaterMontantEnKamas(analyse.profitTotalDeLaSession) + "</div></div>";
+
+  // --- Tableau des ressources, colonnes réduites ---
+  const conteneurCompact = documentFlottant.getElementById("conteneurRessourcesCompact");
+
+  if (analyse.lignesDeRessources.length === 0) {
+    conteneurCompact.innerHTML = '<div class="texte-vide">Aucune ressource en session.</div>';
+    return;
+  }
+
+  const tableau = documentFlottant.createElement("table");
+  tableau.className = "tableau-ressources";
+  tableau.innerHTML =
+    "<thead><tr><th>Ressource</th><th class=\"colonne-chiffre\">Qté</th>" +
+    "<th>Moyen</th><th>×1</th><th>×10</th><th>×100</th><th>×1000</th>" +
+    "<th class=\"colonne-chiffre\">Coût</th></tr></thead><tbody></tbody>";
+
+  const corpsDuTableau = tableau.querySelector("tbody");
+
+  for (const ligne of analyse.lignesDeRessources) {
+    const identifiant = ligne.besoin.identifiantAnkama;
+    const leCoutVientDuPrixCommunautaire =
+      ligne.achatOptimal && ligne.achatOptimal.methodeDeCalcul === "prix communautaire";
+
+    const rangee = documentFlottant.createElement("tr");
+    rangee.innerHTML =
+      '<td class="colonne-nom"><div class="cellule-nom-ressource">' +
+        '<img src="' + ligne.besoin.adresseIcone + '" alt="">' +
+        "<span>" + ligne.besoin.nom +
+        (leCoutVientDuPrixCommunautaire
+          ? construireLaMarqueDePrixCommunautaire(ligne.prixCommunautaire) : "") +
+        "</span></div></td>" +
+      '<td class="colonne-chiffre">' +
+        formaterNombreSimple(ligne.besoin.quantiteTotaleNecessaire) + "</td>" +
+      construireLaCelluleDuPrixMoyen(ligne) +
+      construireLesCellulesDesPrixDeLot(ligne) +
+      '<td class="colonne-chiffre' + (leCoutVientDuPrixCommunautaire ? " attenue" : "") + '">' +
+        (ligne.achatOptimal ? formaterMontantEnKamas(ligne.achatOptimal.coutTotal)
+                            : '<span class="attenue">–</span>') + "</td>";
+
+    // Même branchement que dans la fenêtre principale, donc même redessin des
+    // deux fenêtres : la valeur saisie ici apparaît immédiatement dans l'autre.
+    brancherLesSaisiesDePrixDUneRangee(rangee, identifiant, ligne.besoin.nom);
+
+    corpsDuTableau.appendChild(rangee);
+  }
+
+  conteneurCompact.innerHTML = "";
+  conteneurCompact.appendChild(tableau);
+}
+
+function mettreAJourLIntituleDuBoutonPictureInPicture() {
+  const bouton = document.getElementById("boutonPictureInPicture");
+  const fenetreOuverte = fenetrePictureInPicture && !fenetrePictureInPicture.closed;
+  bouton.textContent = fenetreOuverte ? "Fermer le PIP" : "PIP";
+}
+
+/* ============================================================
+   10. DÉMARRAGE
+   ============================================================ */
+
+chargerEtatDepuisLeStockageLocal();
+champTauxDeTaxe.value = etatApplication.tauxDeTaxeEnPourcent;
+caseModePrixMoyen.checked = !!etatApplication.modeEstimationParPrixMoyen;
+redessinerToutLEcran();
+champRechercheRecette.focus();
+
+// Rafraîchissement des prix communautaires au démarrage. Non bloquant : la
+// session s'affiche immédiatement sur les prix déjà en cache, et les repères
+// se mettent à jour quand la réponse arrive. Hors ligne, rien ne se casse.
+synchroniserLesPrixCommunautairesDeLaSession();
+</script>
+
+</body>
+</html>

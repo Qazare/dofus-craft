@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Calculateur de craft Dofus</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>⚒</text></svg>">
+</head>
+<body>
+
+<div class="entete-application">
+  <h1>Calculateur de craft</h1>
+  <div class="groupe-boutons">
+    <label class="attenue interrupteur-compact">
+      <input type="checkbox" id="caseModePrixMoyen"> Estimer aux prix moyens
+    </label>
+    <span class="attenue petit">Taxe HDV</span>
+    <input id="champTauxDeTaxe" class="champ-taxe" value="2">
+    <span class="attenue petit">%</span>
+    <button id="boutonRevoirLesPrix">Revérifier les prix</button>
+    <button id="boutonSynchroniser" title="Relire les prix de la base communautaire">Relire la base</button>
+    <button id="boutonPictureInPicture">PIP</button>
+    <button id="boutonReglages">Réglages</button>
+  </div>
+</div>
+
+<div class="journal" id="journal"></div>
+
+<div class="bandeau-resultats" id="bandeauResultats"></div>
+
+<h2>Crafts de la session</h2>
+<div class="zone-recherche">
+  <input id="champRechercheRecette" autocomplete="off"
+         placeholder="Nom de l'objet à crafter, par exemple Coiffe du Boufcoul">
+  <div class="liste-suggestions" id="listeSuggestions"></div>
+</div>
+<div id="conteneurCrafts"></div>
+
+<h2>Ressources à acheter</h2>
+<div class="zone-tableau">
+  <div id="conteneurRessources"></div>
+</div>
+
+<div class="legende">
+  <span class="echantillon echantillon-a-moi"></span> ton relevé, publié vers la base
+  <span class="echantillon echantillon-base"></span> relevé de la communauté, remplaçable
+  <span class="echantillon echantillon-recommande"></span> lot retenu par le calcul
+</div>
+
+<div class="note-bas-de-page">
+  <p><strong>Une seule colonne sort de cette machine, la ×1.</strong> La base de dofus-calculator
+  ne connaît qu'un prix par ressource et par serveur : le vrai prix unitaire relevé au HDV.
+  C'est exactement cette colonne. Les lots de 10, 100 et 1000 et le prix moyen n'existent
+  que chez toi, l'API n'a aucun moyen de les représenter.</p>
+
+  <p><strong>Deux signaux visuels qui ne se mélangent pas.</strong> La <em>bordure</em> d'un champ
+  dit d'où vient le chiffre : violet, c'est le tien et il est parti vers la base ; bleu pointillé,
+  il vient de la communauté et n'attend que d'être remplacé ; neutre, il est local. Le <em>fond</em>
+  d'une cellule dit tout autre chose : ce lot fait partie du panier que le calcul recommande
+  d'acheter. Un lot avantageux à l'unité mais inutile pour la quantité voulue reste éteint,
+  et à coût égal la solution qui achète le moins de surplus est retenue.</p>
+
+  <p>Prix saisissables en abrégé : <strong>12k</strong> vaut 12 000, <strong>1,5m</strong> vaut 1 500 000.
+  Le <strong>prix moyen</strong> se saisit comme le HDV l'affiche, le montant du lot entier, avec la
+  taille du lot juste à côté ; l'unitaire est déduit, jamais saisi, et rappelé en info-bulle.</p>
+
+  <p><strong>Revérifier les prix</strong> passe en revue, une ressource à la fois et au clavier,
+  tous les prix jamais renseignés ou vieux de plus de sept jours. Entrée valide et passe au suivant,
+  Échap ferme. Confirmer sans rien changer rafraîchit quand même la date.
+  <strong>PIP</strong> détache une vue compacte qui reste devant le jeu, où les prix sont modifiables
+  et publiables comme ici.</p>
+
+  <p>Le coût de chaque objet est une quote-part du coût groupé des ressources, au prorata des
+  quantités, puisque acheter en lot pour plusieurs recettes coûte moins cher que recette par recette.
+  L'XP par craft dépend de ton niveau de métier : mémorisée par recette, à corriger après une montée.</p>
+
+  <p class="attenue">Recettes : <a href="https://api.dofusdu.de" target="_blank" rel="noopener">DofusDude</a>.
+  Prix : <a href="https://dofus-calculator.fr" target="_blank" rel="noopener">dofus-calculator.fr</a>,
+  serveur Brial. Ton jeton d'écriture reste dans ce navigateur et n'est jamais envoyé ailleurs
+  qu'à dofus-calculator.</p>
+</div>
+
+<script type="module" src="js/application.js"></script>
+</body>
+</html>
