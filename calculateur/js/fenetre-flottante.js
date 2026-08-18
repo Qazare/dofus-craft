@@ -19,7 +19,8 @@ import { analyserLaSessionComplete } from "./analyse.js";
 import { formaterMontantEnKamas, formaterNombreSimple, echapperPourHtml } from "./formats.js";
 import { construireLaCelluleDuPrixUnitaire, construireLesCellulesDesGrosLots,
          construireLaPastilleDeProvenance } from "./cellules-de-prix.js";
-import { brancherLesSaisiesDePrixDUneRangee, enregistrerLeRedessinSecondaire } from "./vue.js";
+import { brancherLesSaisiesDePrixDUneRangee, enregistrerLeRedessinSecondaire,
+         marquerLesChampsCommeObsoletes } from "./vue.js";
 
 const LARGEUR_INITIALE = 520;
 const HAUTEUR_INITIALE = 520;
@@ -172,6 +173,7 @@ export function dessinerLaVueCompacte() {
     corps.appendChild(rangee);
   }
 
+  marquerLesChampsCommeObsoletes(conteneur);
   conteneur.innerHTML = "";
   conteneur.appendChild(tableau);
 }

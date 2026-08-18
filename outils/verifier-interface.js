@@ -213,6 +213,33 @@ await page.locator(".tableau-ressources tbody tr", { hasText: "Corne" })
 await page.waitForTimeout(400);
 verifier("publication coupée, rien ne part", envoisInterceptes.length, nombreAvantCoupure);
 
+// --- Saisie en cours et redessin ---
+// Regression du 18 08 2026 : retirer du DOM un input modifié fait émettre un
+// `change` par le navigateur. Un redessin survenu pendant la frappe publiait
+// donc la saisie en cours. Une valeur à moitié tapée partait vers la base
+// commune, cent fois trop basse, visible par tous les joueurs du serveur.
+console.log("\n--- Saisie interrompue par un redessin ---");
+await page.evaluate(() => {
+  const etat = JSON.parse(localStorage.getItem("calculateur-craft-dofus-v1"));
+  etat.publicationAutomatiqueActive = true;
+  localStorage.setItem("calculateur-craft-dofus-v1", JSON.stringify(etat));
+});
+await page.reload();
+await page.waitForSelector(".tableau-ressources tbody tr");
+await page.waitForTimeout(400);
+const champEnCoursDeSaisie = page.locator(".tableau-ressources tbody tr", { hasText: "Laine" })
+  .locator('[data-taille-de-lot="1"]');
+await champEnCoursDeSaisie.click();
+await page.keyboard.press("Control+a");
+await page.keyboard.type("15");
+verifier("la saisie est bien à moitié tapée",
+  await champEnCoursDeSaisie.inputValue(), "15");
+const nombreAvantFrappe = envoisInterceptes.length;
+await page.evaluate(async () => (await import("./js/vue.js")).redessinerToutLEcran());
+await page.waitForTimeout(600);
+verifier("un redessin pendant la frappe ne publie rien",
+  envoisInterceptes.length, nombreAvantFrappe);
+
 // --- Recommandation d'achat, signal distinct de la provenance ---
 console.log("\n--- Signal de recommandation ---");
 const cellulesRecommandees = await page.locator("td.cellule-recommandee").count();

@@ -166,6 +166,7 @@ function dessinerLesCraftsDeLaSession(analyse) {
 
 function dessinerLeTableauDesRessources(analyse) {
   if (analyse.lignesDeRessources.length === 0) {
+    marquerLesChampsCommeObsoletes(conteneurRessources);
     conteneurRessources.innerHTML =
       '<div class="texte-vide">Les ressources apparaîtront ici dès qu\'un craft sera ajouté.</div>';
     return;
@@ -200,6 +201,9 @@ function dessinerLeTableauDesRessources(analyse) {
     corpsDuTableau.appendChild(rangee);
   }
 
+  // Les champs qui vont disparaître sont marqués avant d'être retirés : leur
+  // `change` de sortie n'est pas une saisie de Brice et ne doit rien publier.
+  marquerLesChampsCommeObsoletes(conteneurRessources);
   conteneurRessources.innerHTML = "";
   conteneurRessources.appendChild(tableau);
 }
@@ -270,6 +274,22 @@ function construireLaCelluleDuCout(ligne) {
    simple ressaisie, immédiatement.
    ============================================================ */
 
+/**
+ * Neutralise les champs de prix d'un conteneur avant qu'il ne soit vidé.
+ *
+ * Retirer du DOM un input dont la valeur a été modifiée fait émettre un
+ * `change` par le navigateur. Ce `change`-là n'exprime aucune intention : il
+ * publierait une saisie en cours, et une saisie à moitié tapée est un faux prix
+ * envoyé à tous les joueurs du serveur.
+ */
+export function marquerLesChampsCommeObsoletes(conteneur) {
+  if (!conteneur) return;
+  for (const champ of conteneur.querySelectorAll(
+      "[data-taille-de-lot], [data-prix-moyen], [data-taille-du-prix-moyen]")) {
+    champ.dataset.rangeeObsolete = "1";
+  }
+}
+
 export function brancherLesSaisiesDePrixDUneRangee(rangee, ligne) {
   const identifiant = ligne.besoin.identifiantAnkama;
   const nomDeLaRessource = ligne.besoin.nom;
@@ -279,6 +299,12 @@ export function brancherLesSaisiesDePrixDUneRangee(rangee, ligne) {
 
   for (const controle of controles) {
     controle.addEventListener("change", async () => {
+      // Un input dont la valeur a été modifiée émet un `change` au moment où il
+      // est retiré du DOM. Un redessin survenu pendant que Brice tape publierait
+      // donc sa saisie en cours, éventuellement à moitié tapée. Le redessin
+      // marque les champs qu'il s'apprête à jeter, et on les ignore ici.
+      if (controle.dataset.rangeeObsolete) return;
+
       const fichePrix = obtenirOuCreerLaFichePrix(identifiant, nomDeLaRessource);
       let prixUnitaireAPublier = null;
 
