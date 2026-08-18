@@ -33,7 +33,11 @@ TOUCHE_MONTRER_LA_FILE := "F7"
 ; ---- Réglages ---------------------------------------------------------------
 FENETRE_DU_JEU := "ahk_exe Dofus.exe"
 SERVEUR := "brial"
-DUREE_INFOBULLE := 2500
+
+; Assez long pour relire quatre nombres sans se presser. L'infobulle est le
+; premier filtre du dispositif, et le plus efficace : elle montre le chiffre
+; avant qu'il n'existe ailleurs. La bâcler, c'est perdre le filtre.
+DUREE_INFOBULLE := 7000
 
 DOSSIER := A_ScriptDir
 LECTEUR := DOSSIER "\lire-le-hdv.ps1"
@@ -121,10 +125,27 @@ ResumerUneLigne(ligne) {
     return resume = "" ? "aucun prix" : resume
 }
 
-Infobulle(texte) {
+/**
+ * Affiche une infobulle près du curseur, effacée après un délai.
+ *
+ * LE MINUTEUR PASSE PAR UNE FONCTION NOMMÉE, et c'est tout l'objet de ce
+ * commentaire. Avec une fonction anonyme, chaque appel crée un nouvel objet
+ * fonction, donc un NOUVEAU minuteur : celui du « Lecture… » n'est pas remplacé
+ * par celui du résultat, il survit et vient effacer le résultat une seconde
+ * plus tard. Symptôme observé : les prix s'affichent puis disparaissent trop
+ * vite pour être lus, d'autant plus vite que la lecture a été longue.
+ *
+ * Avec la même référence de fonction, `SetTimer` réarme le minuteur existant au
+ * lieu d'en empiler un second.
+ */
+Infobulle(texte, duree := 0) {
     global DUREE_INFOBULLE
     ToolTip texte
-    SetTimer () => ToolTip(), -DUREE_INFOBULLE
+    SetTimer EffacerLInfobulle, -(duree > 0 ? duree : DUREE_INFOBULLE)
+}
+
+EffacerLInfobulle() {
+    ToolTip
 }
 
 ; ============================================================================
@@ -150,7 +171,9 @@ HotIf
 
 Capturer() {
     global fileDAttente
-    Infobulle("Lecture…")
+    ; Délai large : la lecture dure une seconde ou deux, et ce message doit
+    ; rester le temps qu'elle se termine, pas s'effacer au milieu.
+    Infobulle("Lecture…", 20000)
     resultat := LireLePopup(WinExist("A"))
 
     if resultat = "" {

@@ -28,6 +28,10 @@ Aucune calibration. Aucun réglage par résolution.
 | `Ctrl+F6` | Vide la file |
 | `F7` | Affiche la file |
 
+L'infobulle reste **7 secondes**. Trop courte pour relire ? `F7` réaffiche toute
+la file, prix compris, autant de fois que tu veux — rien n'est perdu si tu la
+manques.
+
 **Actives seulement quand Dofus est au premier plan.** Ailleurs, `F6` et `F7`
 retrouvent leur comportement normal. `F8` et `F9` sont laissées à la gestion des
 affichages, `F1` à Windows. Pour en changer, tout est en haut du `.ahk`.
@@ -134,6 +138,11 @@ régression d'OCR n'est diagnosticable.
 - **`HotIf()` en fonction, pas la directive `#HotIf`.** Les raccourcis sont posés
   par `Hotkey()` à l'exécution, et celui-ci ne connaît que le critère fonctionnel.
   Mélanger les deux donne des touches actives partout, navigateur compris.
+- **Un minuteur d'infobulle doit passer par une fonction nommée.** Avec une
+  fonction anonyme, chaque appel crée un nouvel objet fonction donc un *nouveau*
+  minuteur : celui du « Lecture… » survit et vient effacer le résultat une
+  seconde plus tard. Symptôme : les prix s'affichent puis disparaissent trop vite
+  pour être lus, d'autant plus vite que la lecture a été longue.
 - **`file` est un nom réservé en AHK v2**, celui de la classe `File`. Le script
   refuse de se charger, avant même la première touche, sur un message qui ne dit
   pas que le nom est pris : *This Class cannot be used as an output variable*.
