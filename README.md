@@ -11,6 +11,26 @@ dans un navigateur, hors du jeu.
 
 ---
 
+## Où ça vit
+
+| | |
+|---|---|
+| Site en ligne | <https://qazare.github.io/dofus-craft/> |
+| Dépôt | <https://github.com/Qazare/dofus-craft>, public |
+| Sur le Mac | `_BVA_/Dev/dofus-craft`, hors coffre Obsidian et hors Dropbox |
+| Sur le PC | un `git clone`, où tu veux, hors dossier synchronisé |
+
+Le déploiement part au push sur `main`, workflow dans `.github/workflows/`. Seul
+`calculateur/` est publié ; les PRD et les tests restent dans le dépôt sans être
+servis. Git est la synchro entre les deux machines, et il n'y en a pas d'autre :
+deux machines écrivant dans le même `.git` finiraient par le corrompre.
+
+Ne sont pas synchronisés, et c'est assumé : le jeton d'écriture et tes prix, qui
+vivent dans le stockage local de chaque navigateur. L'export JSON est là pour
+les transporter à la main si besoin.
+
+---
+
 ## Contenu du dossier
 
 | Chemin | Rôle |
@@ -25,6 +45,7 @@ dans un navigateur, hors du jeu.
 | `archive/` | L'ancien fichier unique, figé. |
 | `prd-calculateur-craft.md`, `prd-calculateur-craft-v2.md` | Cahiers des charges du calculateur. |
 | `prd-gestion-fenetres.md` | Cahier des charges de la gestion de fenêtres, audit du script AHK. |
+| `prd-ocr-hdv.md` | Cahier des charges de l'OCR des prix du HDV. Plan validé, phase 0 non faite. |
 | `reference/Dof.ahk` | Copie intacte du script d'origine, jamais modifiée. |
 
 ---
@@ -265,3 +286,5 @@ d'Alt+Tab.
 | 18 08 2026 | La provenance passe par la bordure des champs, la recommandation d'achat par le fond des cellules. Le vert d'entourage est abandonné pour la recommandation : une bordure ne peut pas porter deux significations. |
 | 18 08 2026 | La migration ne publie pas les anciens prix ×1. Republier en masse des chiffres non revérifiés serait polluer une base partagée. |
 | 18 08 2026 | Défaut corrigé, hérité de la v1 : un export sans `versionDuSchema` héritait du numéro courant lors de la fusion avec l'état par défaut, et sa migration était sautée en silence. La version se lit désormais sur l'objet fourni, avant toute fusion. |
+| 18 08 2026 | Publié sur GitHub Pages depuis un dépôt public, <https://qazare.github.io/dofus-craft/>. Le dépôt vit dans `_BVA_/Dev/`, aux côtés des autres projets de code, hors coffre et hors Dropbox. Public assumé : Pages n'existe pas autrement sur un compte gratuit, et rien ici n'est sensible — le jeton n'est pas dans le dépôt. |
+| 18 08 2026 | Chantier OCR cadré, voir `prd-ocr-hdv.md`. Deux partis pris : le nom de l'objet n'est pas reconnu par l'OCR, c'est le site qui désigne la ressource attendue ; et une valeur lue est rangée hors de `basePrixDesRessources`, ce qui la rend structurellement inatteignable par la publication et invisible des totaux, sans drapeau à tester nulle part. Rien ne s'écrit avant la mesure du taux de lecture exacte sur cinq captures réelles. |
