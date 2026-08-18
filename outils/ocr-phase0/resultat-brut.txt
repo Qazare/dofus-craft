@@ -1,0 +1,92 @@
+
+=== mode brut ===
+popup-moskito-4lots      moyen                  attendu 368      lu (vide)     ECHEC  brut: 
+popup-moskito-4lots      lot 1                  attendu 994      lu (vide)     ECHEC  brut: 
+popup-moskito-4lots      lot 10                 attendu 8998     lu (vide)     ECHEC  brut: 
+popup-moskito-4lots      lot 100                attendu 49999    lu (vide)     ECHEC  brut: 
+popup-moskito-4lots      lot 1000 (rouge)       attendu 780000   lu (vide)     ECHEC  brut: 
+popup-shinlarve-1lot     moyen                  attendu 503      lu (vide)     ECHEC  brut: 
+popup-shinlarve-1lot     lot 1                  attendu 1486     lu (vide)     ECHEC  brut: 
+fenetre-entiere          popup moyen            attendu 241      lu (vide)     ECHEC  brut: 
+fenetre-entiere          popup lot 1            attendu 490      lu (vide)     ECHEC  brut: 
+fenetre-entiere          popup lot 10           attendu 1300     lu (vide)     ECHEC  brut: 
+fenetre-entiere          popup lot 100          attendu 12986    lu (vide)     ECHEC  brut: 
+fenetre-entiere          popup lot 1000         attendu 129900   lu (vide)     ECHEC  brut: 
+fenetre-entiere          liste 1 volk pourpre   attendu 564      lu (vide)     ECHEC  brut: 
+fenetre-entiere          liste 2 volk ebene     attendu 1272     lu (vide)     ECHEC  brut: 
+fenetre-entiere          liste 3 tofu           attendu 66       lu (vide)     ECHEC  brut: 
+fenetre-entiere          liste 4 cassees        attendu (vide)   lu (vide)     ok
+fenetre-entiere          liste 5 moskito        attendu 368      lu (vide)     ECHEC  brut: 
+fenetre-entiere          liste 6 scara blanc    attendu 241      lu (vide)     ECHEC  brut: 
+fenetre-entiere          liste 7 scara bleu     attendu 163      lu (vide)     ECHEC  brut: 
+fenetre-entiere          liste 8 scara rouge    attendu 149      lu (vide)     ECHEC  brut: 
+1 / 20 exactes, soit 5 % - avec liste blanche : 1 / 20, soit 5 %
+
+=== mode zoom x3 ===
+popup-moskito-4lots      moyen                  attendu 368      lu 368        ok
+popup-moskito-4lots      lot 1                  attendu 994      lu 994        ok
+popup-moskito-4lots      lot 10                 attendu 8998     lu 8998       ok
+popup-moskito-4lots      lot 100                attendu 49999    lu 49999      ok
+popup-moskito-4lots      lot 1000 (rouge)       attendu 780000   lu 780000     ok
+popup-shinlarve-1lot     moyen                  attendu 503      lu 503        ok
+popup-shinlarve-1lot     lot 1                  attendu 1486     lu 1486       ok
+fenetre-entiere          popup moyen            attendu 241      lu 241        ok
+fenetre-entiere          popup lot 1            attendu 490      lu 490        ok
+fenetre-entiere          popup lot 10           attendu 1300     lu 300        ECHEC  brut: i 300
+fenetre-entiere          popup lot 100          attendu 12986    lu 12986      ok
+fenetre-entiere          popup lot 1000         attendu 129900   lu 129900     ok
+fenetre-entiere          liste 1 volk pourpre   attendu 564      lu 564        ok
+fenetre-entiere          liste 2 volk ebene     attendu 1272     lu 1272       ok
+fenetre-entiere          liste 3 tofu           attendu 66       lu 66         ok
+fenetre-entiere          liste 4 cassees        attendu (vide)   lu (vide)     ok
+fenetre-entiere          liste 5 moskito        attendu 368      lu 368        ok
+fenetre-entiere          liste 6 scara blanc    attendu 241      lu 241        ok
+fenetre-entiere          liste 7 scara bleu     attendu 163      lu 163        ok
+fenetre-entiere          liste 8 scara rouge    attendu 149      lu 149        ok
+19 / 20 exactes, soit 95 % - avec liste blanche : 20 / 20, soit 100 %
+
+=== mode zoom x3 + gris ===
+popup-moskito-4lots      moyen                  attendu 368      lu 368        ok
+popup-moskito-4lots      lot 1                  attendu 994      lu 994        ok
+popup-moskito-4lots      lot 10                 attendu 8998     lu 8998       ok
+popup-moskito-4lots      lot 100                attendu 49999    lu 49999      ok
+popup-moskito-4lots      lot 1000 (rouge)       attendu 780000   lu 780000     ok
+popup-shinlarve-1lot     moyen                  attendu 503      lu 503        ok
+popup-shinlarve-1lot     lot 1                  attendu 1486     lu 1486       ok
+fenetre-entiere          popup moyen            attendu 241      lu 241        ok
+fenetre-entiere          popup lot 1            attendu 490      lu 490        ok
+fenetre-entiere          popup lot 10           attendu 1300     lu 300        ECHEC  brut: i 300
+fenetre-entiere          popup lot 100          attendu 12986    lu 12986      ok
+fenetre-entiere          popup lot 1000         attendu 129900   lu 129900     ok
+fenetre-entiere          liste 1 volk pourpre   attendu 564      lu 564        ok
+fenetre-entiere          liste 2 volk ebene     attendu 1272     lu 1272       ok
+fenetre-entiere          liste 3 tofu           attendu 66       lu 66         ok
+fenetre-entiere          liste 4 cassees        attendu (vide)   lu (vide)     ok
+fenetre-entiere          liste 5 moskito        attendu 368      lu 368        ok
+fenetre-entiere          liste 6 scara blanc    attendu 241      lu 241        ok
+fenetre-entiere          liste 7 scara bleu     attendu 163      lu 163        ok
+fenetre-entiere          liste 8 scara rouge    attendu 149      lu 149        ok
+19 / 20 exactes, soit 95 % - avec liste blanche : 20 / 20, soit 100 %
+
+=== mode zoom x3 + seuil ===
+popup-moskito-4lots      moyen                  attendu 368      lu 368        ok
+popup-moskito-4lots      lot 1                  attendu 994      lu 994        ok
+popup-moskito-4lots      lot 10                 attendu 8998     lu 8998       ok
+popup-moskito-4lots      lot 100                attendu 49999    lu 49999      ok
+popup-moskito-4lots      lot 1000 (rouge)       attendu 780000   lu 780000     ok
+popup-shinlarve-1lot     moyen                  attendu 503      lu 503        ok
+popup-shinlarve-1lot     lot 1                  attendu 1486     lu 1486       ok
+fenetre-entiere          popup moyen            attendu 241      lu 241        ok
+fenetre-entiere          popup lot 1            attendu 490      lu 490        ok
+fenetre-entiere          popup lot 10           attendu 1300     lu 300        ECHEC  brut: 300
+fenetre-entiere          popup lot 100          attendu 12986    lu 12986      ok
+fenetre-entiere          popup lot 1000         attendu 129900   lu 129900     ok
+fenetre-entiere          liste 1 volk pourpre   attendu 564      lu 564        ok
+fenetre-entiere          liste 2 volk ebene     attendu 1272     lu 1272       ok
+fenetre-entiere          liste 3 tofu           attendu 66       lu (vide)     ECHEC  brut: 
+fenetre-entiere          liste 4 cassees        attendu (vide)   lu (vide)     ok
+fenetre-entiere          liste 5 moskito        attendu 368      lu 368        ok
+fenetre-entiere          liste 6 scara blanc    attendu 241      lu 241        ok
+fenetre-entiere          liste 7 scara bleu     attendu 163      lu 163        ok
+fenetre-entiere          liste 8 scara rouge    attendu 149      lu 149        ok
+18 / 20 exactes, soit 90 % - avec liste blanche : 18 / 20, soit 90 %

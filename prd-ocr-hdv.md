@@ -1,7 +1,9 @@
 # OCR des prix du HDV, cahier des charges
 
-**État : plan validé sur le papier, phase 0 non faite. Rien n'est écrit tant
-que la phase 0 n'a pas dit oui.**
+**État : phase 0 passée le 18 08 2026, 95 % de lectures exactes au chiffre près,
+100 % avec liste blanche. Le seuil est atteint, la construction est ouverte.
+Résultat, et les trois corrections qu'il porte au plan ci-dessous :
+`outils/ocr-phase0/RESULTAT.md`.**
 
 Objectif : remplacer la saisie manuelle des quatre prix de lot par une touche.
 Rien d'autre. Le calcul, l'arbitrage des lots et la publication ne changent pas.

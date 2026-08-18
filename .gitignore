@@ -1,3 +1,8 @@
 node_modules/
 outils/apercu.png
 .DS_Store
+
+# Les captures de la phase 0 de l'OCR : 7 Mo, et elles montrent le compte de
+# Brice en jeu. Dépôt public, elles restent en local. Le chiffre qu'elles ont
+# produit est dans outils/ocr-phase0/RESULTAT.md.
+outils/ocr-phase0/captures/
