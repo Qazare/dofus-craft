@@ -8,7 +8,7 @@
  * circule entre machines.
  */
 import { NOM_DU_SERVEUR_SUIVI, IDENTIFIANT_DU_SERVEUR_SUIVI } from "./config.js";
-import { etatApplication, sauvegarderEtat, remplacerLEtat,
+import { etatApplication, sauvegarderEtat, remplacerLEtat, construireLExportPartageable,
          lireLeJetonDEcriture, enregistrerLeJetonDEcriture } from "./etat.js";
 import { verifierLeJeton } from "./api-prix.js";
 import { redessinerToutLEcran } from "./vue.js";
@@ -139,8 +139,10 @@ function brancherLesControles() {
 
 function exporterLEtat() {
   // `etatApplication` ne contient pas le jeton, rangé sous une autre clé :
-  // l'export peut donc circuler sans exposer de secret.
-  const contenu = JSON.stringify(etatApplication, null, 2);
+  // l'export peut donc circuler sans exposer de secret. La quarantaine de
+  // l'OCR en est retirée pour une raison voisine — une valeur non confirmée
+  // qui voyage d'une machine à l'autre finit par être prise pour vérifiée.
+  const contenu = JSON.stringify(construireLExportPartageable(), null, 2);
   const lien = document.createElement("a");
   lien.href = URL.createObjectURL(new Blob([contenu], { type: "application/json" }));
   lien.download = "calculateur-craft-dofus-sauvegarde.json";

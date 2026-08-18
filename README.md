@@ -98,6 +98,29 @@ l'XP, le calculateur chiffre l'opération. Ce qu'il fait et que duffus ne fait p
   suggestions en boucle, Entrée ajoute celle qui est mise en avant, Échap
   referme. Sans sélection explicite, Entrée prend le premier résultat. Le survol
   souris et la mise en avant clavier désignent toujours la même ligne.
+- **Trois destinations par craft, et trois façons de compter.** *Pour mes persos* :
+  aucun revenu, aucune taxe, et le coût compté à part — un objet gardé n'est pas
+  une perte, c'est une acquisition, et le seul arbitrage qui vaille est son prix
+  au HDV. *Revente à l'unité* : l'équipement, que le HDV liste pièce par pièce
+  puisque ses jets de stats diffèrent tous. *Revente par lot* : pains, potions,
+  ressources de métier, qui s'empilent au HDV par 1, 10, 100 et 1000. La
+  destination est proposée d'après la famille de l'objet, et reste modifiable.
+- **Écoulement de la production, en vente par lot.** Le revenu vient du meilleur
+  découpage en lots, par la même programmation dynamique que l'achat mais
+  retournée. Avec une asymétrie qui change tout : à l'achat on peut prendre plus
+  que nécessaire, à la vente on ne peut pas vendre plus qu'on n'a crafté. Le
+  partitionnement est donc exact, et ce qu'aucun lot ne permet d'écouler est
+  annoncé **invendu** plutôt que supposé vendu — sans prix ×1, un reliquat de 7
+  sur un lot de 10 ne rapporte rien, et le dire évite de croire à une
+  rentabilité qui repose sur une vente impossible.
+- **Recherche dans trois familles d'objets.** Équipements, consommables et
+  ressources, interrogés ensemble. Chercher un pain ne renvoyait rien jusqu'ici,
+  alors que c'est un craft de paysan ordinaire.
+- **Quarantaine des prix lus par OCR.** Un chiffre venu de la machine se range
+  dans `prixOcrEnAttente`, jamais dans `basePrixDesRessources`. Il est donc
+  invisible des totaux et inatteignable par la publication, sans qu'aucun
+  drapeau n'ait à être testé nulle part. Une coche est son seul passage vers la
+  base : un clic, il devient violet et part vers dofus-calculator si c'est un ×1.
 - **Taxe HDV de 2 %**, modifiable.
 - **Mémoire locale.** Prix, XP par recette et cache des noms d'objets restent
   dans le navigateur, avec export et import JSON. Aucun compte, aucun serveur.
@@ -181,6 +204,9 @@ c'est ce qui permet aux tests d'importer le moteur sans traîner le DOM derrièr
 | `api-dofusdude.js`, `api-prix.js` | Les deux accès réseau, et eux seuls. |
 | `journal.js` | Bandeau d'état. Rien ne part au réseau en silence. |
 | `cellules-de-prix.js` | Fabriques de cellules, partagées par les deux fenêtres. |
+| `vente.js` | Destination d'un craft, champs de vente, écoulement par lot. |
+| `ingestion-ocr.js` | Lecture du format d'échange de l'OCR. Pur, sans DOM. |
+| `quarantaine.js` | `prixOcrEnAttente`, et l'unique passage vers la base personnelle. |
 | `vue.js`, `recherche.js`, `revue.js`, `reglages.js`, `fenetre-flottante.js` | Interface. |
 | `crafts.js` | Ajout de recette et synchronisation qui en découle. |
 | `application.js` | Démarrage et câblage. Seul module à toucher au document. |
@@ -197,8 +223,7 @@ donc servir le dossier, d'où `outils/servir.js`.
    chiffres dont personne n'a revérifié la fraîcheur polluerait la base commune.
    Ils partiront un par un, à la ressaisie. Une revue complète au HDV réglerait
    la question en une séance.
-1. **Vente par lot.** Le prix de vente est aujourd'hui unitaire. Si la revente se
-   fait par 10 ou 100, il faut la même mécanique côté vente.
+1. ~~**Vente par lot.**~~ Réglé le 18 08 2026, avec la destination du craft.
 2. **Formule d'XP de craft.** Non résolue, et volontairement pas devinée. L'API
    DofusDude ne l'expose pas, le forum officiel refuse la lecture automatisée, et
    les chiffres relevés (niveau 89 : recette 90 → 1800 XP, 89 → 1618, 88 → 1449)
@@ -290,3 +315,11 @@ d'Alt+Tab.
 | 18 08 2026 | Chantier OCR cadré, voir `prd-ocr-hdv.md`. Deux partis pris : le nom de l'objet n'est pas reconnu par l'OCR, c'est le site qui désigne la ressource attendue ; et une valeur lue est rangée hors de `basePrixDesRessources`, ce qui la rend structurellement inatteignable par la publication et invisible des totaux, sans drapeau à tester nulle part. Rien ne s'écrit avant la mesure du taux de lecture exacte sur cinq captures réelles. |
 | 18 08 2026 | **Bug corrigé, publication d'une saisie en cours.** Retirer du DOM un input modifié fait émettre un `change` par le navigateur. Tout redessin survenu pendant la frappe publiait donc la valeur à demi tapée vers la base commune : « 1500 » interrompu après deux touches partait à 15 kamas, cent fois trop bas, visible par tous les joueurs de Brial. Les champs sont désormais marqués obsolètes avant que leur conteneur ne soit vidé, et leur `change` de sortie est ignoré. Trouvé par le test d'interface Playwright, qui signalait deux POST identiques là où un seul était attendu — le doublon n'était que la face visible. |
 | 18 08 2026 | **Phase 0 de l'OCR passée : 95 % de lectures exactes au chiffre près, 100 % avec liste blanche. Le chantier démarre.** Mesure sur 20 zones de prix découpées dans 3 captures réelles, détail dans `outils/ocr-phase0/RESULTAT.md`. Trois corrections au cahier des charges : l'agrandissement ×3 est la condition du fonctionnement et non un réglage (sans lui, 5 %) ; le seuillage est retiré, il fait perdre les chiffres clairs sur fond texturé ; la liste blanche se fait après lecture, `Windows.Media.Ocr` n'en ayant pas, et se limite aux sosies du `1` — le symbole kama se collant au nombre, toute autre lettre mappée vers un chiffre fabriquerait des prix. L'espace fine des milliers, principale inquiétude, ne pose aucun problème. Échantillon plus petit que les 5 captures demandées : le chiffre est net mais tient sur peu, à reconfirmer. |
+| 18 08 2026 | **Trois destinations par craft plutôt qu'un prix de vente unique.** Un objet crafté pour ses persos n'a pas de revenu et ne doit pas peindre la session en rouge : son coût est compté à part. L'équipement se vend à l'unité, le HDV le listant pièce par pièce puisque ses jets de stats diffèrent. Pains, potions et ressources de métier se vendent par lot, comme ils s'achètent. La destination est proposée d'après la famille de l'objet, jamais imposée. |
+| 18 08 2026 | **La vente par lot n'est pas l'achat en miroir exact.** À l'achat, prendre plus que nécessaire reste une ressource gardée, d'où le surachat. À la vente, on ne peut pas vendre plus qu'on n'a crafté : le partitionnement est exact et le reliquat reste invendu. Le calcul l'annonce au lieu de l'arrondir au lot supérieur — un revenu supposé sur une vente impossible fausserait la décision de crafter. |
+| 18 08 2026 | Recherche étendue aux consommables et aux ressources, à côté des équipements. La vente par lot n'aurait rien eu à calculer autrement : ce qui s'empile au HDV, ce sont précisément les objets que la recherche ne trouvait pas. Les trois appels partent ensemble, une famille en échec est ignorée plutôt que de faire échouer la recherche. |
+| 18 08 2026 | **Quarantaine de l'OCR, schéma 5.** Un prix lu par la machine va dans `prixOcrEnAttente`, jamais dans la base personnelle. La garantie est structurelle et non déclarative : la publication et les totaux lisent la base, ils ne voient donc rien de la quarantaine sans une ligne de code modifiée. Le seul passage est la confirmation humaine — une coche dans le tableau, ou Entrée dans la revue. Exclue de l'export JSON, au même titre que le jeton. |
+| 18 08 2026 | **Phase 1 de l'OCR : pas de calibration, des ancres.** Le cahier des charges prévoyait quatre rectangles réglés une fois par résolution. On repère plutôt le popup par la paire d'en-têtes « Lot » et « prix », puis chaque rangée par son libellé de lot. Un rectangle figé se décale dès que l'interface bouge d'un pixel ; une ancre suit le popup où qu'il soit, et rien n'est à refaire en changeant d'écran. Vérifié sur les trois captures réelles : les quatre prix, le prix moyen et le nom sont lus juste, fenêtre entière comprise. |
+| 18 08 2026 | **Deux passes d'OCR, et la seconde n'est pas un luxe.** La première lit l'image entière et sert seulement à trouver le popup. La seconde le relit seul, agrandi ×3 : sur une capture de fenêtre entière, la passe large rate les libellés de lot les plus fins — `1` et `10` absents, `100` et `1 000` présents — et la moitié des prix se perdait avec eux. |
+| 18 08 2026 | **Bornes de cohérence entre lots corrigées, elles criaient au loup.** Un lot de 10 valant moins de dix fois l'unité est la situation normale au HDV, c'est même la raison d'acheter en lot : 490 l'unité contre 1 300 les dix, relevé réel. La borne basse vaut donc un cinquième de la taille du lot et non la taille elle-même. Bornes rejouées à l'identique côté site et côté script. |
+| 18 08 2026 | Touches de la relève fixées à `F6` et `F7`, avec `Maj` et `Ctrl` pour les variantes. `F8` et `F9` gèrent les affichages, `F1` appartient à Windows. Actives seulement quand Dofus est au premier plan : ailleurs les touches retrouvent leur comportement normal. |

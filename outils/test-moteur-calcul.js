@@ -6,8 +6,13 @@
  *
  *   node outils/test-moteur-calcul.js
  */
-import { calculerLAchatLeMoinsCher, calculerLApprovisionnementDUneRessource }
+import { calculerLAchatLeMoinsCher, calculerLApprovisionnementDUneRessource,
+         calculerLaVenteLaPlusRentable }
   from "../calculateur/js/moteur.js";
+import { analyserUnCollageOcr, lireUnMontant, releverLesIncoherencesEntreLots }
+  from "../calculateur/js/ingestion-ocr.js";
+import { DESTINATION_USAGE_PERSONNEL, DESTINATION_VENTE_PAR_LOT, DESTINATION_VENTE_UNITAIRE }
+  from "../calculateur/js/config.js";
 import { interpreterSaisieDeMontant, formaterNombreSimple, calculerAgeEnJoursDepuis }
   from "../calculateur/js/formats.js";
 import { etatApplication, remplacerLEtat, deduireLePrixMoyenUnitaire, obtenirOuCreerLaFichePrix }
@@ -238,6 +243,111 @@ console.log("\n--- Âge d'un relevé ---");
 verifier("horodatage absent donne null", calculerAgeEnJoursDepuis(null), null);
 verifier("aujourd'hui vaut 0 jour", calculerAgeEnJoursDepuis(Date.now()), 0);
 verifier("hier vaut 1 jour", calculerAgeEnJoursDepuis(Date.now() - 86400000), 1);
+
+console.log("\n--- Vente par lot ---");
+
+// Miroir de l'achat, avec l'asymétrie qui compte : on ne peut pas vendre plus
+// qu'on n'a crafté, donc le partitionnement est exact et le reliquat reste
+// invendu au lieu d'être arrondi au lot supérieur.
+let vente = calculerLaVenteLaPlusRentable(100, { 100: 12000, 1: 100 });
+verifier("100 unités partent en un lot de 100", vente.revenuBrut, 12000);
+verifier("et rien ne reste invendu", vente.quantiteInvendue, 0);
+
+vente = calculerLaVenteLaPlusRentable(100, { 10: 1500, 1: 100 });
+verifier("10 lots de 10 valent mieux que 100 unités", vente.revenuBrut, 15000);
+verifier("le découpage retenu est bien 10 × 10", vente.compositionDesVentes, { 10: 10 });
+
+vente = calculerLaVenteLaPlusRentable(17, { 10: 1500 });
+verifier("sans prix ×1, seuls 10 des 17 se vendent", vente.revenuBrut, 1500);
+verifier("les 7 autres sont annoncés invendus", vente.quantiteInvendue, 7);
+
+// Le ×1 est ici moins rentable à l'unité que le lot de 10, mais il reste le
+// seul moyen d'écouler le reliquat : le calcul doit mélanger les deux.
+vente = calculerLaVenteLaPlusRentable(17, { 10: 1500, 1: 100 });
+verifier("avec un ×1, le reliquat s'écoule", vente.revenuBrut, 1500 + 7 * 100);
+verifier("le découpage mélange les deux tailles", vente.compositionDesVentes, { 10: 1, 1: 7 });
+verifier("et plus rien n'est invendu", vente.quantiteInvendue, 0);
+
+// Le piège symétrique de celui de l'achat : le meilleur prix unitaire n'est pas
+// forcément le meilleur découpage, il faut essayer les combinaisons.
+vente = calculerLaVenteLaPlusRentable(20, { 10: 900, 1: 100 });
+verifier("20 unités à 100 rapportent plus que 2 lots de 10 à 900", vente.revenuBrut, 2000);
+
+verifier("aucun prix de vente donne null", calculerLaVenteLaPlusRentable(10, {}), null);
+verifier("quantité nulle rapporte zéro",
+  calculerLaVenteLaPlusRentable(0, { 1: 100 }).revenuBrut, 0);
+
+console.log("\n--- Destination d'un craft ---");
+
+remplacerLEtat({
+  versionDuSchema: 4,
+  craftsDeLaSession: [{
+    identifiantDeLigne: "l1", identifiantAnkama: 1, nom: "Test", niveau: 1,
+    quantiteACrafter: 10, prixDeVenteUnitaire: 500, ingredients: []
+  }]
+});
+verifier("un craft migré passe en revente à l'unité",
+  etatApplication.craftsDeLaSession[0].destination, DESTINATION_VENTE_UNITAIRE);
+verifier("son prix unitaire est recopié dans le lot de 1",
+  etatApplication.craftsDeLaSession[0].prixDeVenteParTailleDeLot, { 1: 500 });
+verifier("la quarantaine apparaît vide", etatApplication.prixOcrEnAttente, {});
+
+let bilanDeSession = analyserLaSessionComplete();
+verifier("le revenu suit le prix unitaire", bilanDeSession.revenuBrutTotal, 5000);
+
+etatApplication.craftsDeLaSession[0].destination = DESTINATION_USAGE_PERSONNEL;
+bilanDeSession = analyserLaSessionComplete();
+verifier("en usage personnel, aucun revenu", bilanDeSession.revenuBrutTotal, 0);
+verifier("et aucune taxe", bilanDeSession.taxeTotale, 0);
+
+etatApplication.craftsDeLaSession[0].destination = DESTINATION_VENTE_PAR_LOT;
+etatApplication.craftsDeLaSession[0].prixDeVenteParTailleDeLot = { 10: 8000 };
+bilanDeSession = analyserLaSessionComplete();
+verifier("en vente par lot, le revenu vient du découpage", bilanDeSession.revenuBrutTotal, 8000);
+
+console.log("\n--- Lecture du format d'échange de l'OCR ---");
+
+verifier("un collage sans signature n'est pas reconnu",
+  analyserUnCollageOcr("bonjour").reconnu, false);
+verifier("un collage vide non plus", analyserUnCollageOcr("").reconnu, false);
+verifier("une signature seule mais valide est reconnue",
+  analyserUnCollageOcr("#DOFUS-HDV/1\tbrial\t2026-08-18T14:22:11").reconnu, true);
+
+const collage = analyserUnCollageOcr(
+  "#DOFUS-HDV/1\tbrial\t2026-08-18T14:22:11\n"
+  + "289\tBlé\t125\t1200\t11000\t98000\t1250\t10\t0.93\n"
+  + "290\tHoublon\t\t\t\t\t\t\t\n"
+  + "\tSansIdentifiant\t100\t\t\t\t\t\t");
+
+verifier("le serveur est lu dans l'en-tête", collage.serveur, "brial");
+verifier("une seule ligne exploitable sur trois", collage.lignes.length, 1);
+verifier("les deux autres sont rejetées", collage.rejets.length, 2);
+verifier("les quatre prix de lot sont lus",
+  collage.lignes[0].prixParTailleDeLot, { 1: 125, 10: 1200, 100: 11000, 1000: 98000 });
+verifier("le prix moyen et sa taille de lot aussi",
+  [collage.lignes[0].prixMoyenDuLot, collage.lignes[0].tailleDuLotDuPrixMoyen], [1250, 10]);
+verifier("aucune incohérence sur cette ligne", collage.lignes[0].anomalies, []);
+
+// Un champ vide n'est PAS un prix de zéro : un lot non proposé par le HDV à cet
+// instant ne doit pas devenir une ressource gratuite.
+verifier("une colonne vide vaut null, pas zéro", lireUnMontant(""), null);
+verifier("une colonne non numérique vaut null", lireUnMontant("12a"), null);
+verifier("les espaces de milliers sont absorbés", lireUnMontant("129 900"), 129900);
+verifier("un prix hors bornes est refusé", lireUnMontant("999999999"), null);
+
+// Le contrôle qui attrape l'erreur d'OCR la plus coûteuse : un chiffre perdu ou
+// en trop, qui divise ou multiplie le prix par dix sans rien casser d'apparent.
+verifier("des lots cohérents ne signalent rien",
+  releverLesIncoherencesEntreLots({ 1: 125, 10: 1200 }), []);
+verifier("un lot de 10 cent fois trop cher est signalé",
+  releverLesIncoherencesEntreLots({ 1: 125, 10: 12000 }).length, 1);
+verifier("un lot de 10 moins cher que le ×1 aussi",
+  releverLesIncoherencesEntreLots({ 1: 125, 10: 120 }).length, 1);
+
+const collageDouteux = analyserUnCollageOcr(
+  "#DOFUS-HDV/1\tbrial\t2026-08-18T14:22:11\n289\tBlé\t125\t12000\t\t\t\t\t1");
+verifier("une ligne incohérente est marquée, pas rejetée",
+  [collageDouteux.lignes.length, collageDouteux.lignes[0].confianceBasse], [1, true]);
 
 console.log("\n" + (nombreDEchecs === 0
   ? "Tous les tests passent."

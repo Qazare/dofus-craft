@@ -8,7 +8,8 @@
  */
 import {
   CLE_STOCKAGE_DE_LA_SESSION, CLE_STOCKAGE_DU_JETON, VERSION_COURANTE_DU_SCHEMA,
-  TAILLE_DE_LOT_PAR_DEFAUT_POUR_LE_PRIX_MOYEN
+  TAILLE_DE_LOT_PAR_DEFAUT_POUR_LE_PRIX_MOYEN, TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE,
+  DESTINATION_PAR_DEFAUT
 } from "./config.js";
 
 /**
@@ -24,6 +25,11 @@ import {
  *     unitaire de HDV, donc l'équivalent de la colonne ×1 et non du prix moyen.
  *     Apparition de `publicationParRessource`, qui suit ce qui a été envoyé
  *     vers la base, et de `publicationAutomatiqueActive`.
+ * 5 : un craft porte une `destination` — usage personnel, revente à l'unité ou
+ *     revente par lot — et, dans ce dernier cas, ses propres prix de vente par
+ *     taille de lot. Apparition aussi de `prixOcrEnAttente`, la quarantaine des
+ *     prix lus par OCR, rangée à part de `basePrixDesRessources` exactement
+ *     comme `prixCommunautairesParRessource` l'est déjà.
  *
  * Toute évolution du format incrémente ce numéro et ajoute son étape dans
  * `migrerLEtatVersLeSchemaCourant`.
@@ -49,6 +55,11 @@ export function construireUnEtatVierge() {
     prixCommunautairesParRessource: {},
     // Suivi des envois vers la base : ce qui est parti, ce qui a échoué.
     publicationParRessource: {},
+    // Quarantaine des prix lus par OCR, indexée par identifiant Ankama. Rangée
+    // ici et NON dans `basePrixDesRessources` : c'est ce qui rend ces valeurs
+    // structurellement invisibles des totaux et inatteignables par la
+    // publication, sans qu'aucun drapeau n'ait à être testé nulle part.
+    prixOcrEnAttente: {},
     cacheDesObjets: {},
     memoireExperienceParRecette: {}
   };
@@ -184,8 +195,38 @@ export function migrerLEtatVersLeSchemaCourant() {
     etatApplication.publicationParRessource = {};
   }
 
+  // --- 4 vers 5 : destination des crafts, et quarantaine de l'OCR ---
+  //
+  // Tous les crafts existants passent en revente à l'unité : c'est ce que le
+  // calcul faisait jusqu'ici, la migration ne doit déplacer aucun chiffre. Le
+  // prix de vente unitaire déjà saisi est recopié dans le lot de 1, pour qu'un
+  // basculement vers la vente par lot ne parte pas d'un écran vide.
+  if (versionDeLEtatCharge < 5) {
+    for (const craft of etatApplication.craftsDeLaSession || []) {
+      normaliserUnCraft(craft);
+    }
+    if (!etatApplication.prixOcrEnAttente) etatApplication.prixOcrEnAttente = {};
+    console.info("Schéma 4 vers 5 : les crafts existants passent en revente à l'unité.");
+  }
+
   etatApplication.versionDuSchema = VERSION_COURANTE_DU_SCHEMA;
   sauvegarderEtat();
+}
+
+/**
+ * Complète un craft des champs apparus au schéma 5. Point de passage unique,
+ * appelé par la migration comme par l'ajout d'une recette : aucun craft ne peut
+ * donc exister sans destination.
+ */
+export function normaliserUnCraft(craft) {
+  if (!craft.destination) craft.destination = DESTINATION_PAR_DEFAUT;
+  if (!craft.prixDeVenteParTailleDeLot) {
+    craft.prixDeVenteParTailleDeLot = {};
+    if (craft.prixDeVenteUnitaire > 0) {
+      craft.prixDeVenteParTailleDeLot[TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE] = craft.prixDeVenteUnitaire;
+    }
+  }
+  return craft;
 }
 
 /* ============================================================
@@ -221,4 +262,19 @@ export function deduireLePrixMoyenUnitaire(fichePrix) {
   const tailleDuLot = fichePrix.tailleDuLotDuPrixMoyen || TAILLE_DE_LOT_PAR_DEFAUT_POUR_LE_PRIX_MOYEN;
   if (prixDuLot <= 0 || tailleDuLot <= 0) return 0;
   return prixDuLot / tailleDuLot;
+}
+
+/* ============================================================
+   Export
+
+   Deux choses ne sortent jamais d'ici : le jeton, rangé sous sa propre clé, et
+   la quarantaine de l'OCR. La seconde pour la même raison que le premier est
+   exclu — un export circule entre machines, et une valeur non confirmée qui
+   voyage finit tôt ou tard par être prise pour une valeur vérifiée.
+   ============================================================ */
+
+export function construireLExportPartageable() {
+  const copie = Object.assign({}, etatApplication);
+  delete copie.prixOcrEnAttente;
+  return copie;
 }

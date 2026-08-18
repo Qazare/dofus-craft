@@ -18,7 +18,7 @@
 import { analyserLaSessionComplete } from "./analyse.js";
 import { formaterMontantEnKamas, formaterNombreSimple, echapperPourHtml } from "./formats.js";
 import { construireLaCelluleDuPrixUnitaire, construireLesCellulesDesGrosLots,
-         construireLaPastilleDeProvenance } from "./cellules-de-prix.js";
+         construireLaPastilleDeProvenance, construireLaPastilleDeQuarantaine } from "./cellules-de-prix.js";
 import { brancherLesSaisiesDePrixDUneRangee, enregistrerLeRedessinSecondaire,
          marquerLesChampsCommeObsoletes } from "./vue.js";
 
@@ -157,7 +157,8 @@ export function dessinerLaVueCompacte() {
       '<td class="colonne-nom"><div class="cellule-nom-ressource">'
         + '<img src="' + echapperPourHtml(ligne.besoin.adresseIcone) + '" alt="">'
         + "<span>" + echapperPourHtml(ligne.besoin.nom)
-        + construireLaPastilleDeProvenance(ligne) + "</span></div></td>"
+        + construireLaPastilleDeProvenance(ligne)
+        + construireLaPastilleDeQuarantaine(ligne) + "</span></div></td>"
       + '<td class="colonne-chiffre">'
         + formaterNombreSimple(ligne.besoin.quantiteTotaleNecessaire) + "</td>"
       + construireLaCelluleDuPrixUnitaire(ligne)

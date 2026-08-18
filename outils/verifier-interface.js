@@ -79,11 +79,21 @@ page.on("pageerror", e => erreursConsole.push(String(e)));
 const envoisInterceptes = [];
 
 await page.route("**/api.dofusdu.de/**", route => {
-  const correspondance = route.request().url().match(/\/items\/resources\/(\d+)/);
-  route.fulfill({
-    contentType: "application/json",
-    body: JSON.stringify(correspondance ? RESSOURCES_DE_TEST[correspondance[1]] : RECETTE_DE_TEST)
-  });
+  const adresse = route.request().url();
+  const detailDUneRessource = adresse.match(/\/items\/resources\/(\d+)/);
+
+  let reponse;
+  if (detailDUneRessource) {
+    reponse = RESSOURCES_DE_TEST[detailDUneRessource[1]];
+  } else if (adresse.includes("/items/equipment/search")) {
+    reponse = RECETTE_DE_TEST;
+  } else {
+    // Consommables et ressources : interrogés eux aussi depuis l'ouverture de
+    // la vente par lot, mais une coiffe ne s'y trouve pas.
+    reponse = [];
+  }
+
+  route.fulfill({ contentType: "application/json", body: JSON.stringify(reponse) });
 });
 
 await page.route("**/dofus-calculator.fr/api/**", route => {
@@ -253,6 +263,138 @@ console.log("\n--- Étanchéité du jeton ---");
 verifier("le jeton n'est pas dans l'état de session",
   await page.evaluate(() =>
     localStorage.getItem("calculateur-craft-dofus-v1").includes("jeton-de-test")), false);
+
+/* --- Quarantaine de l'OCR ---
+
+   Le parcours complet, du collage à la publication : un texte signé arrive, ses
+   valeurs se rangent en quarantaine, aucun total ne bouge, rien ne part vers la
+   base — puis une coche les fait entrer dans la base personnelle et publier.
+   C'est la garantie centrale du chantier, elle mérite d'être vérifiée dans un
+   vrai navigateur et pas seulement en unité. */
+console.log("\n--- Quarantaine de l'OCR ---");
+
+async function collerDansLaPage(texte) {
+  await page.evaluate(contenu => {
+    const donnees = new DataTransfer();
+    donnees.setData("text/plain", contenu);
+    document.dispatchEvent(new ClipboardEvent("paste", {
+      clipboardData: donnees, bubbles: true, cancelable: true
+    }));
+  }, texte);
+  await page.waitForTimeout(250);
+}
+
+// Les tests précédents ont rempli les prix de la Laine à la main. On les
+// efface pour repartir d'une ressource vierge : la quarantaine ne s'affiche que
+// là où Brice n'a pas déjà relevé le prix lui-même, sa saisie primant toujours.
+await page.evaluate(async () => {
+  const etat = await import("./js/etat.js");
+  const vue = await import("./js/vue.js");
+  delete etat.etatApplication.basePrixDesRessources[289];
+  etat.sauvegarderEtat();
+  vue.redessinerToutLEcran();
+});
+await page.waitForTimeout(200);
+
+const coutAvantLeCollage = await page.locator("#bandeauResultats .valeur").first().textContent();
+
+// Un collage ordinaire ne doit rien déclencher, et surtout rien annoncer.
+await collerDansLaPage("https://exemple.fr/une-adresse-quelconque");
+verifier("un collage sans signature ne met rien en quarantaine",
+  await page.locator(".pastille-quarantaine").count(), 0);
+
+// La Laine (289) a 6 unités nécessaires et aucun prix personnel.
+await collerDansLaPage(
+  "#DOFUS-HDV/1\tbrial\t2026-08-18T14:22:11\n"
+  + "289\tLaine\t490\t1300\t12986\t129900\t241\t1\t0.98");
+
+verifier("la ligne passe en quarantaine",
+  await page.locator(".pastille-quarantaine").count(), 1);
+verifier("le champ ×1 de la Laine est en orange pointillé",
+  await page.locator("tr:has-text('Laine') input.prix-en-quarantaine").count() > 0, true);
+verifier("mais le champ reste vide, la valeur n'est qu'un repère",
+  await page.locator("tr:has-text('Laine') input[data-taille-de-lot='1']").inputValue(), "");
+verifier("la valeur lue s'affiche en texte de remplacement",
+  await page.locator("tr:has-text('Laine') input[data-taille-de-lot='1']")
+    .getAttribute("placeholder"), "490");
+
+// LA garantie : rien n'a bougé dans les totaux, et rien n'est parti sur le réseau.
+verifier("aucun total n'a bougé",
+  await page.locator("#bandeauResultats .valeur").first().textContent(), coutAvantLeCollage);
+const envoisAvantLaCoche = envoisInterceptes.length;
+verifier("et rien n'est parti vers la base", envoisAvantLaCoche, envoisInterceptes.length);
+verifier("la quarantaine est rangée hors de la base personnelle",
+  await page.evaluate(() => {
+    const etat = JSON.parse(localStorage.getItem("calculateur-craft-dofus-v1"));
+    return [Object.keys(etat.prixOcrEnAttente).length,
+            (etat.basePrixDesRessources[289] || {}).prixParTailleDeLot || null];
+  }), [1, null]);
+
+// La coche du ×1 : entrée en base, passage au violet, et publication.
+await page.click("tr:has-text('Laine') [data-confirmer-ocr='1']");
+await page.waitForTimeout(700);
+
+verifier("le ×1 confirmé porte désormais la valeur",
+  await page.locator("tr:has-text('Laine') input[data-taille-de-lot='1']").inputValue(), "490");
+verifier("et passe au violet",
+  await page.locator("tr:has-text('Laine') input[data-taille-de-lot='1'].prix-a-moi").count(), 1);
+verifier("un envoi est parti à la confirmation",
+  envoisInterceptes.length, envoisAvantLaCoche + 1);
+verifier("avec le prix lu par l'OCR",
+  envoisInterceptes[envoisInterceptes.length - 1].corps.prices[0].price, 490);
+verifier("et l'identifiant interne, pas l'Ankama",
+  envoisInterceptes[envoisInterceptes.length - 1].corps.prices[0].item_id, 1001);
+
+// Les trois autres lots restent en attente : une coche ne confirme qu'elle-même.
+verifier("le ×10 reste en quarantaine",
+  await page.locator("tr:has-text('Laine') input[data-taille-de-lot='10'].prix-en-quarantaine")
+    .count(), 1);
+
+// La pastille confirme tout le reste d'un coup.
+await page.click("tr:has-text('Laine') [data-confirmer-toute-la-ligne]");
+await page.waitForTimeout(700);
+verifier("la pastille vide la quarantaine de la ligne",
+  await page.locator(".pastille-quarantaine").count(), 0);
+// Les milliers sont séparés par une espace insécable fine. On ne garde que les
+// chiffres plutôt que de coller un caractère invisible dans un test.
+verifier("les gros lots sont entrés en base",
+  (await page.locator("tr:has-text('Laine') input[data-taille-de-lot='100']").inputValue())
+    .replace(/[^0-9]/g, ""), "12986");
+verifier("mais eux ne partent pas vers la base, ils ne sont pas partageables",
+  envoisInterceptes.length, envoisAvantLaCoche + 1);
+
+verifier("la quarantaine n'entre pas dans l'export",
+  await page.evaluate(async () => {
+    const etat = await import("./js/etat.js");
+    return Object.prototype.hasOwnProperty.call(etat.construireLExportPartageable(), "prixOcrEnAttente");
+  }), false);
+
+/* --- Destination d'un craft --- */
+console.log("\n--- Destination d'un craft ---");
+
+verifier("un équipement est proposé en revente à l'unité",
+  await page.locator("[data-destination]").first().inputValue(), "vente-unitaire");
+
+await page.selectOption("[data-destination]", "vente-par-lot");
+await page.waitForTimeout(250);
+verifier("le mode par lot affiche quatre champs de vente",
+  await page.locator("[data-vente-taille-de-lot]").count(), 4);
+
+await page.fill("[data-vente-taille-de-lot='10']", "8000");
+await page.locator("[data-vente-taille-de-lot='10']").press("Tab");
+await page.waitForTimeout(300);
+verifier("un reliquat sans prix ×1 est annoncé invendu",
+  await page.locator(".carte-craft .prix-manquant:has-text('invendu')").count() > 0, true);
+
+await page.selectOption("[data-destination]", "usage");
+await page.waitForTimeout(250);
+verifier("en usage personnel, aucun champ de vente",
+  await page.locator("[data-vente-taille-de-lot], [data-champ='prixDeVenteUnitaire']").count(), 0);
+verifier("et le coût sort du résultat de session",
+  await page.locator("#bandeauResultats:has-text('Pour tes persos')").count(), 1);
+
+await page.selectOption("[data-destination]", "vente-unitaire");
+await page.waitForTimeout(250);
 
 // --- Mode PIP ---
 console.log("\n--- Fenêtre flottante ---");

@@ -6,9 +6,10 @@
  * DEUX SIGNAUX VISUELS ORTHOGONAUX, à ne jamais mélanger :
  *
  *   la BORDURE du champ dit d'où vient le chiffre
- *     violet         relevé par Brice, et publié vers la base
- *     bleu pointillé venu de la base, en repère, remplaçable à la frappe
- *     neutre         local, jamais partagé : lots de 10, 100, 1000 et prix moyen
+ *     violet           relevé par Brice, et publié vers la base
+ *     bleu pointillé   venu de la base, en repère, remplaçable à la frappe
+ *     orange pointillé lu par l'OCR, en QUARANTAINE, non confirmé
+ *     neutre           local, jamais partagé : lots de 10, 100, 1000 et prix moyen
  *
  *   le FOND de la cellule dit ce que le calcul recommande d'acheter
  *     teinté, barre à gauche   ce lot fait partie du panier retenu
@@ -24,7 +25,40 @@ import {
   NOMBRE_DE_JOURS_AVANT_PRIX_CONSIDERE_ANCIEN
 } from "./config.js";
 import { etatApplication, deduireLePrixMoyenUnitaire } from "./etat.js";
+import { lireLaQuarantaine, lireLeMontantEnQuarantaine } from "./quarantaine.js";
 import { formaterNombreSimple, formulerLAge, calculerAgeEnJoursDepuis, echapperPourHtml } from "./formats.js";
+
+/* ============================================================
+   Quarantaine de l'OCR
+
+   Une valeur lue par la machine s'affiche, mais n'est jamais le contenu du
+   champ : elle occupe le texte de remplacement, en orange pointillé. Le champ
+   reste donc vide, et une frappe part d'un champ propre — même règle que pour
+   le repère communautaire, et pour la même raison.
+
+   La coche est le seul passage vers la base personnelle. Un clic dessus écrit
+   la valeur, la fait passer au violet, et l'envoie à dofus-calculator si c'est
+   un ×1. Rien d'autre ne l'y fait entrer.
+
+   Une cellule en quarantaine ne reçoit JAMAIS de fond de recommandation :
+   recommander un achat sur un chiffre non vérifié serait le pire des deux
+   mondes. Le calcul ne la voit d'ailleurs pas, elle n'est pas dans la base.
+   ============================================================ */
+
+/**
+ * Enrobe un champ de sa coche de confirmation, quand une valeur d'OCR attend.
+ * Sans valeur en attente, le champ est rendu tel quel : pas de bouton mort.
+ */
+function habillerDeLaCocheDeConfirmation(champHtml, tailleDeLot, montantEnAttente) {
+  if (!(montantEnAttente > 0)) return champHtml;
+  return '<div class="cellule-avec-coche">' + champHtml
+    + '<button class="coche-ocr" data-confirmer-ocr="' + tailleDeLot + '"'
+    + ' title="' + echapperPourHtml("Confirmer " + formaterNombreSimple(montantEnAttente)
+        + " kamas lu par l'OCR"
+        + (tailleDeLot === TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE
+            ? ". Il passera au violet et partira vers la base." : ". Il restera local."))
+    + '">\u2713</button></div>';
+}
 
 /** Nombre de lots de cette taille retenus par le calcul, 0 si aucun. */
 function compterLesLotsRetenus(ligne, taille) {
@@ -60,6 +94,11 @@ export function construireLaCelluleDuPrixUnitaire(ligne) {
   const proposerLeRepere = prixPersonnel <= 0 && ligne.prixCommunautaire
     && ligne.prixCommunautaire.prixUnitaire > 0;
 
+  // La quarantaine passe devant le repère communautaire : c'est un relevé que
+  // Brice vient de faire au HDV, l'autre vient de quelqu'un d'autre et date.
+  const montantEnQuarantaine = prixPersonnel > 0
+    ? 0 : lireLeMontantEnQuarantaine(identifiant, TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE);
+
   let classes = "champ-prix-lot";
   let infoBulle = "";
 
@@ -78,6 +117,14 @@ export function construireLaCelluleDuPrixUnitaire(ligne) {
           ? "Publication en cours…"
           : "Ton relevé, pas encore publié";
 
+  } else if (montantEnQuarantaine > 0) {
+    classes += " prix-en-quarantaine";
+    const ficheEnAttente = lireLaQuarantaine(identifiant);
+    infoBulle = "Lu par l'OCR, non confirmé. Hors des totaux et impossible à publier "
+      + "tant que tu ne l'as pas validé d'un clic sur la coche."
+      + (ficheEnAttente && ficheEnAttente.anomalies && ficheEnAttente.anomalies.length > 0
+          ? " À regarder de près : " + ficheEnAttente.anomalies.join(" ; ") + "." : "");
+
   } else if (proposerLeRepere) {
     classes += " prix-de-la-base";
     infoBulle = "Prix relevé par la communauté sur " + NOM_DU_SERVEUR_SUIVI + ", "
@@ -85,13 +132,23 @@ export function construireLaCelluleDuPrixUnitaire(ligne) {
       + ". Saisis le tien pour le remplacer et le publier.";
   }
 
-  return "<td" + habillerLaCelluleRecommandee(nombreDeLotsRetenus, TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE) + ">"
-    + '<input class="' + classes + '"'
+  const texteDeRemplacement = montantEnQuarantaine > 0
+    ? formaterNombreSimple(montantEnQuarantaine)
+    : (proposerLeRepere ? formaterNombreSimple(ligne.prixCommunautaire.prixUnitaire) : "–");
+
+  const champ = '<input class="' + classes + '"'
     + ' data-taille-de-lot="' + TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE + '"'
     + (infoBulle ? ' title="' + echapperPourHtml(infoBulle) + '"' : "")
     + ' value="' + (prixPersonnel ? formaterNombreSimple(prixPersonnel) : "") + '"'
-    + ' placeholder="' + (proposerLeRepere
-        ? formaterNombreSimple(ligne.prixCommunautaire.prixUnitaire) : "–") + '">'
+    + ' placeholder="' + texteDeRemplacement + '">';
+
+  // Pas de fond de recommandation sur une cellule en quarantaine : le calcul ne
+  // voit pas cette valeur, afficher un conseil d'achat dessus serait un mensonge.
+  const habillage = montantEnQuarantaine > 0
+    ? "" : habillerLaCelluleRecommandee(nombreDeLotsRetenus, TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE);
+
+  return "<td" + habillage + ">"
+    + habillerDeLaCocheDeConfirmation(champ, TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE, montantEnQuarantaine)
     + "</td>";
 }
 
@@ -104,15 +161,29 @@ export function construireLesCellulesDesGrosLots(ligne) {
   const fichePrix = etatApplication.basePrixDesRessources[ligne.besoin.identifiantAnkama];
   const prixParTailleDeLot = fichePrix ? (fichePrix.prixParTailleDeLot || {}) : {};
 
+  const identifiant = ligne.besoin.identifiantAnkama;
+
   let cellules = "";
   for (const taille of TAILLES_DE_LOT_DISPONIBLES) {
     if (taille === TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE) continue;
     const prixDeCeLot = prixParTailleDeLot[taille] || 0;
     const nombreDeLotsRetenus = compterLesLotsRetenus(ligne, taille);
+    const montantEnQuarantaine = prixDeCeLot > 0 ? 0 : lireLeMontantEnQuarantaine(identifiant, taille);
 
-    cellules += "<td" + habillerLaCelluleRecommandee(nombreDeLotsRetenus, taille) + ">"
-      + '<input class="champ-prix-lot" data-taille-de-lot="' + taille + '"'
-      + ' value="' + (prixDeCeLot ? formaterNombreSimple(prixDeCeLot) : "") + '" placeholder="–">'
+    const champ = '<input class="champ-prix-lot'
+      + (montantEnQuarantaine > 0 ? " prix-en-quarantaine" : "") + '"'
+      + ' data-taille-de-lot="' + taille + '"'
+      + (montantEnQuarantaine > 0
+          ? ' title="' + echapperPourHtml("Lu par l'OCR, non confirmé. Hors des totaux tant "
+              + "que la coche n'est pas cliquée.") + '"'
+          : "")
+      + ' value="' + (prixDeCeLot ? formaterNombreSimple(prixDeCeLot) : "") + '"'
+      + ' placeholder="' + (montantEnQuarantaine > 0
+          ? formaterNombreSimple(montantEnQuarantaine) : "–") + '">';
+
+    cellules += "<td"
+      + (montantEnQuarantaine > 0 ? "" : habillerLaCelluleRecommandee(nombreDeLotsRetenus, taille)) + ">"
+      + habillerDeLaCocheDeConfirmation(champ, taille, montantEnQuarantaine)
       + "</td>";
   }
   return cellules;
@@ -167,6 +238,27 @@ export function construireLaCelluleDuPrixMoyen(ligne) {
  * trompeur. La pastille vire à l'orange passé le seuil d'ancienneté, le même
  * que pour les relevés de Brice.
  */
+export function construireLaPastilleDeQuarantaine(ligne) {
+  const fiche = lireLaQuarantaine(ligne.besoin.identifiantAnkama);
+  if (!fiche) return "";
+
+  const nombreDeValeurs = Object.keys(fiche.prixParTailleDeLot || {}).length;
+  if (nombreDeValeurs === 0 && !(fiche.prixMoyenDuLot > 0)) return "";
+
+  const alerte = fiche.confianceBasse
+    ? " À regarder en premier : " + (fiche.anomalies || []).join(" ; ") : "";
+
+  return ' <span class="pastille pastille-quarantaine'
+    + (fiche.confianceBasse ? " pastille-douteuse" : "") + '"'
+    + ' data-confirmer-toute-la-ligne="oui" role="button" tabindex="0"'
+    + ' title="' + echapperPourHtml(nombreDeValeurs + " prix lu(s) par l'OCR, en attente. "
+      + "Clic pour tout confirmer d'un coup." + alerte) + '">'
+    + "OCR " + nombreDeValeurs + " \u2713</span>"
+    + ' <span class="pastille pastille-rejet" data-oublier-quarantaine="oui"'
+    + ' role="button" tabindex="0"'
+    + ' title="Jeter cette lecture sans la confirmer. Rien n\'entre en base.">\u00d7</span>';
+}
+
 export function construireLaPastilleDeProvenance(ligne) {
   if (ligne.origineDuPrixUnitaire === "communautaire" && ligne.prixCommunautaire) {
     const age = calculerAgeEnJoursDepuis(ligne.prixCommunautaire.horodatageDuReleve);

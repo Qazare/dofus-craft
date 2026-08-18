@@ -11,6 +11,20 @@
 
 export const ADRESSE_BASE_API_DOFUSDUDE = "https://api.dofusdu.de/dofus3/v1/fr";
 
+/**
+ * Familles d'objets fouillées par la recherche de recette.
+ *
+ * L'équipement seul ne suffit plus depuis que la vente par lot existe : ce qui
+ * se vend empilé, ce sont les pains, les potions et les ressources travaillées,
+ * qui vivent dans `consumables` et `resources`. Chercher dans les trois est la
+ * condition pour que le mode « vente par lot » ait quelque chose à calculer.
+ *
+ * La famille sert aussi de subtype dans l'URL de détail d'un objet, et décide
+ * de la destination proposée par défaut à un craft neuf.
+ */
+export const FAMILLES_DOBJETS_CRAFTABLES = ["equipment", "consumables", "resources"];
+export const NOMBRE_DE_SUGGESTIONS_PAR_FAMILLE = 6;
+
 /* ---- API des prix communautaires ----
 
    dofus-calculator.fr. Lecture ouverte, écriture avec jeton.
@@ -33,6 +47,42 @@ export const IDENTIFIANT_DU_SERVEUR_SUIVI = 22;
 export const NOM_DU_SERVEUR_SUIVI = "Brial";
 export const NOMBRE_MAXIMAL_DE_RESSOURCES_PAR_APPEL_DE_LECTURE = 100;
 export const NOMBRE_MAXIMAL_DE_PRIX_PAR_ENVOI = 500;
+
+/* ---- Destination d'un craft ----
+
+   Trois usages qui ne se chiffrent pas de la même façon, et qu'il serait faux
+   de traiter par un seul champ de prix de vente :
+
+     usage           crafté pour soi, jamais revendu. Aucun revenu, aucune taxe.
+                     Ce n'est pas une perte, c'est un coût d'acquisition — le
+                     comparer à un achat au HDV est le seul arbitrage qui vaille.
+     vente-unitaire  l'équipement. Le HDV le liste pièce par pièce, ses jets de
+                     stats étant tous différents : un prix, une ligne.
+     vente-par-lot   les pains, potions et ressources de métier. Ils s'empilent
+                     au HDV par 1, 10, 100 et 1000, exactement comme à l'achat.
+   ---- */
+
+export const DESTINATION_USAGE_PERSONNEL = "usage";
+export const DESTINATION_VENTE_UNITAIRE = "vente-unitaire";
+export const DESTINATION_VENTE_PAR_LOT = "vente-par-lot";
+
+export const DESTINATION_PAR_DEFAUT = DESTINATION_VENTE_UNITAIRE;
+
+/**
+ * Destination proposée à l'ajout, selon la famille de l'objet. Une proposition,
+ * pas une contrainte : le sélecteur reste libre sur chaque ligne.
+ */
+export const DESTINATION_PAR_DEFAUT_SELON_LA_FAMILLE = {
+  equipment: DESTINATION_VENTE_UNITAIRE,
+  consumables: DESTINATION_VENTE_PAR_LOT,
+  resources: DESTINATION_VENTE_PAR_LOT
+};
+
+export const INTITULES_DES_DESTINATIONS = {
+  [DESTINATION_USAGE_PERSONNEL]: "Pour mes persos",
+  [DESTINATION_VENTE_UNITAIRE]: "Revente à l'unité",
+  [DESTINATION_VENTE_PAR_LOT]: "Revente par lot"
+};
 
 /* ---- Modèle de prix ---- */
 
@@ -64,4 +114,19 @@ export const CLE_STOCKAGE_DE_LA_SESSION = "calculateur-craft-dofus-v1";
  */
 export const CLE_STOCKAGE_DU_JETON = "calculateur-craft-dofus-jeton";
 
-export const VERSION_COURANTE_DU_SCHEMA = 4;
+export const VERSION_COURANTE_DU_SCHEMA = 5;
+
+/* ---- Format d'échange de l'OCR ----
+
+   L'en-tête magique n'est pas décoratif : le calculateur écoute le collage sur
+   toute la page, et sans signature un Ctrl+V malheureux irait écrire dans
+   l'état. Un collage qui ne commence pas par cette chaîne est ignoré sans un
+   mot, ce qui est le comportement voulu — un collage ordinaire n'est pas une
+   erreur à signaler. ---- */
+
+export const SIGNATURE_DU_FORMAT_OCR = "#DOFUS-HDV/";
+export const VERSION_DU_FORMAT_OCR = 1;
+
+/** Bornes de vraisemblance, rejouées côté site et non simplement supposées. */
+export const PRIX_MINIMAL_PLAUSIBLE = 1;
+export const PRIX_MAXIMAL_PLAUSIBLE = 100000000;

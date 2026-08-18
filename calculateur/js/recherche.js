@@ -6,7 +6,7 @@
  * résultats au plus, revenir au premier après le dernier coûte une pression de
  * touche là où un arrêt en butée en coûterait sept.
  */
-import { rechercherDesEquipementsParNom } from "./api-dofusdude.js";
+import { rechercherDesObjetsCraftablesParNom } from "./api-dofusdude.js";
 import { ajouterUnCraftALaSession } from "./crafts.js";
 import { echapperPourHtml } from "./formats.js";
 
@@ -49,7 +49,7 @@ function surSaisie() {
   // Recherche différée pour ne pas interroger l'API à chaque frappe.
   minuteurDeRechercheDifferee = setTimeout(async () => {
     try {
-      afficherLesSuggestions(await rechercherDesEquipementsParNom(terme));
+      afficherLesSuggestions(await rechercherDesObjetsCraftablesParNom(terme));
     } catch (erreur) {
       suggestionsAffichees = [];
       indexMisEnAvant = -1;
@@ -136,7 +136,12 @@ function afficherLesSuggestions(resultatsDeLApi) {
       '<img src="' + echapperPourHtml(objet.image_urls ? objet.image_urls.icon : "") + '" alt="">'
       + "<div><div>" + echapperPourHtml(objet.name) + "</div>"
       + '<div class="details">Niveau ' + objet.level + " · "
-      + objet.recipe.length + " ingrédients</div></div>";
+      + objet.recipe.length + " ingrédients"
+      + (objet.type && objet.type.name ? " · " + echapperPourHtml(objet.type.name) : "")
+      + (objet.familleDObjet && objet.familleDObjet !== "equipment"
+          ? ' <span class="marque-empilable" title="Se vend empilé au HDV,'
+            + ' la revente par lot est proposée par défaut">empilable</span>' : "")
+      + "</div></div>";
 
     element.addEventListener("mousedown", evenement => {
       evenement.preventDefault();

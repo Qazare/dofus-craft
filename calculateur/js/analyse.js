@@ -7,7 +7,10 @@
  * coût par objet est une quote-part et non un calcul isolé.
  */
 import { etatApplication, deduireLePrixMoyenUnitaire } from "./etat.js";
-import { calculerLApprovisionnementDUneRessource } from "./moteur.js";
+import { calculerLApprovisionnementDUneRessource, calculerLaVenteLaPlusRentable } from "./moteur.js";
+import {
+  DESTINATION_USAGE_PERSONNEL, DESTINATION_VENTE_PAR_LOT, DESTINATION_PAR_DEFAUT
+} from "./config.js";
 import {
   construireLesPrixDeLotEffectifs, determinerLePrixUnitaire,
   obtenirLePrixCommunautaire, laBaseEstEnDesaccord, lireLEtatDePublication
@@ -88,6 +91,11 @@ export function analyserLaSessionComplete() {
   let taxeTotale = 0;
   let coutAttribueTotal = 0;
   let experienceTotaleGagnee = 0;
+  // Ce qui part chez les persos de Brice est compté à part. Le faire entrer
+  // dans le résultat de la session peindrait en rouge une séance de craft
+  // parfaitement saine : un objet gardé n'est pas une perte, c'est une
+  // acquisition, et le seul arbitrage qui vaille est son prix au HDV.
+  let coutDesCraftsPourUsagePersonnel = 0;
 
   for (const craft of etatApplication.craftsDeLaSession) {
     const quantiteACrafter = Math.max(0, craft.quantiteACrafter || 0);
@@ -104,18 +112,30 @@ export function analyserLaSessionComplete() {
       }
     }
 
-    const revenuBrutDeCeCraft = (craft.prixDeVenteUnitaire || 0) * quantiteACrafter;
+    const destination = craft.destination || DESTINATION_PAR_DEFAUT;
+    const vente = chiffrerLaVenteDUnCraft(craft, destination, quantiteACrafter);
+
+    const revenuBrutDeCeCraft = vente.revenuBrut;
     const taxeDeCeCraft = revenuBrutDeCeCraft * tauxDeTaxe;
     const profitDeCeCraft = revenuBrutDeCeCraft - taxeDeCeCraft - coutDesRessourcesDeCeCraft;
     const experienceDeCeCraft = (craft.experienceParCraft || 0) * quantiteACrafter;
 
-    revenuBrutTotal += revenuBrutDeCeCraft;
-    taxeTotale += taxeDeCeCraft;
-    coutAttribueTotal += coutDesRessourcesDeCeCraft;
+    if (destination === DESTINATION_USAGE_PERSONNEL) {
+      coutDesCraftsPourUsagePersonnel += coutDesRessourcesDeCeCraft;
+    } else {
+      revenuBrutTotal += revenuBrutDeCeCraft;
+      taxeTotale += taxeDeCeCraft;
+      coutAttribueTotal += coutDesRessourcesDeCeCraft;
+    }
     experienceTotaleGagnee += experienceDeCeCraft;
 
     bilansParCraft.push({
       identifiantDeLigne: craft.identifiantDeLigne,
+      destination,
+      // Découpage retenu pour écouler la production, en vente par lot. null
+      // dans les deux autres destinations, où la question ne se pose pas.
+      venteOptimale: vente.venteOptimale,
+      quantiteInvendue: vente.quantiteInvendue,
       coutDesRessources: coutDesRessourcesDeCeCraft,
       coutParObjet: quantiteACrafter > 0 ? coutDesRessourcesDeCeCraft / quantiteACrafter : 0,
       revenuBrut: revenuBrutDeCeCraft,
@@ -137,8 +157,37 @@ export function analyserLaSessionComplete() {
     revenuBrutTotal,
     taxeTotale,
     profitTotalDeLaSession: revenuBrutTotal - taxeTotale - coutAttribueTotal,
+    coutDesCraftsPourUsagePersonnel,
     experienceTotaleGagnee,
     nombreDeRessourcesSansPrix
+  };
+}
+
+/**
+ * Revenu attendu d'un craft, selon ce qu'on compte en faire.
+ *
+ * @returns {{revenuBrut:number, venteOptimale:Object|null, quantiteInvendue:number}}
+ */
+function chiffrerLaVenteDUnCraft(craft, destination, quantiteACrafter) {
+  if (destination === DESTINATION_USAGE_PERSONNEL) {
+    return { revenuBrut: 0, venteOptimale: null, quantiteInvendue: 0 };
+  }
+
+  if (destination === DESTINATION_VENTE_PAR_LOT) {
+    const vente = calculerLaVenteLaPlusRentable(
+      quantiteACrafter, craft.prixDeVenteParTailleDeLot);
+    if (vente === null) return { revenuBrut: 0, venteOptimale: null, quantiteInvendue: quantiteACrafter };
+    return {
+      revenuBrut: vente.revenuBrut,
+      venteOptimale: vente,
+      quantiteInvendue: vente.quantiteInvendue
+    };
+  }
+
+  return {
+    revenuBrut: (craft.prixDeVenteUnitaire || 0) * quantiteACrafter,
+    venteOptimale: null,
+    quantiteInvendue: 0
   };
 }
 

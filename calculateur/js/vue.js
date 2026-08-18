@@ -14,6 +14,11 @@ import { formaterMontantEnKamas, formaterNombreSimple, interpreterSaisieDeMontan
 import { construireLaCelluleDuPrixUnitaire, construireLesCellulesDesGrosLots,
          construireLaCelluleDuPrixMoyen, construireLaPastilleDeProvenance,
          construireLaMentionDeDesaccord } from "./cellules-de-prix.js";
+import { construireLeSelecteurDeDestination, construireLesChampsDeVente,
+         construireLaLigneDeBilan } from "./vente.js";
+import { construireLaPastilleDeQuarantaine } from "./cellules-de-prix.js";
+import { confirmerUnPrixEnQuarantaine, confirmerToutesLesValeursDUneRessource,
+         oublierLaQuarantaine } from "./quarantaine.js";
 import { publierUnPrixUnitaire, laPublicationEstPossible } from "./api-prix.js";
 import { annoncer } from "./journal.js";
 
@@ -55,6 +60,17 @@ function dessinerLeBandeauDeResultats(analyse) {
       + " ressource(s) sans prix, total sous-estimé</div>"
     : "";
 
+  // Ce qui est crafté pour les persos a sa propre case, hors du résultat de
+  // session. Le mélanger au profit peindrait en rouge une séance saine : une
+  // potion gardée n'est pas une perte, c'est une acquisition — reste à savoir
+  // si elle revient moins cher qu'au HDV, et ça, c'est le coût par objet qui le
+  // dit, ligne par ligne.
+  const caseUsagePersonnel = analyse.coutDesCraftsPourUsagePersonnel > 0
+    ? '<div class="case-resultat"><div class="intitule">Pour tes persos</div>'
+      + '<div class="valeur">' + formaterMontantEnKamas(analyse.coutDesCraftsPourUsagePersonnel) + "</div>"
+      + '<div class="precision">crafté pour toi, hors résultat</div></div>'
+    : "";
+
   let caseExperience = "";
   if (analyse.experienceTotaleGagnee > 0) {
     const coutParPointDExperience = -analyse.profitTotalDeLaSession / analyse.experienceTotaleGagnee;
@@ -79,6 +95,7 @@ function dessinerLeBandeauDeResultats(analyse) {
       + formaterMontantEnKamas(analyse.profitTotalDeLaSession) + "</div>"
       + '<div class="precision">' + etatApplication.craftsDeLaSession.length
       + " recette(s) en session</div></div>"
+    + caseUsagePersonnel
     + caseExperience;
 }
 
@@ -98,8 +115,6 @@ function dessinerLesCraftsDeLaSession(analyse) {
 
   for (const craft of etatApplication.craftsDeLaSession) {
     const bilan = analyse.bilansParCraft.find(b => b.identifiantDeLigne === craft.identifiantDeLigne);
-    const classeDuProfit = bilan.profitTotal >= 0 ? "gain" : "perte";
-    const signeDuProfit = bilan.profitTotal >= 0 ? "+" : "";
 
     const carte = document.createElement("div");
     carte.className = "carte-craft";
@@ -114,25 +129,13 @@ function dessinerLesCraftsDeLaSession(analyse) {
       + '<div class="grille-champs-craft">'
         + '<div class="champ-etiquete"><label class="etiquette">Quantité</label>'
           + '<input data-champ="quantiteACrafter" value="' + craft.quantiteACrafter + '"></div>'
-        + '<div class="champ-etiquete"><label class="etiquette">Prix de vente unitaire</label>'
-          + '<input data-champ="prixDeVenteUnitaire" value="'
-          + (craft.prixDeVenteUnitaire ? formaterNombreSimple(craft.prixDeVenteUnitaire) : "")
-          + '" placeholder="ex. 45k"></div>'
+        + construireLeSelecteurDeDestination(craft)
         + '<div class="champ-etiquete"><label class="etiquette">XP par craft à ton niveau</label>'
           + '<input data-champ="experienceParCraft" value="'
           + (craft.experienceParCraft ? craft.experienceParCraft : "") + '" placeholder="ex. 1618"></div>'
+        + construireLesChampsDeVente(craft)
       + "</div>"
-      + '<div class="bilan-ligne">'
-        + "<span>Coût par objet <strong>" + formaterMontantEnKamas(bilan.coutParObjet) + "</strong></span>"
-        + '<span>Profit par objet <strong class="' + classeDuProfit + '">' + signeDuProfit
-          + formaterMontantEnKamas(bilan.profitParObjet) + "</strong></span>"
-        + '<span>Total ligne <strong class="' + classeDuProfit + '">' + signeDuProfit
-          + formaterMontantEnKamas(bilan.profitTotal) + "</strong></span>"
-        + '<span class="attenue">Seuil de revente '
-          + formaterMontantEnKamas(bilan.prixDeVenteMinimalPourNePasPerdre) + "</span>"
-        + (bilan.auMoinsUnPrixManquant
-            ? '<span class="prix-manquant">prix de ressource manquant</span>' : "")
-      + "</div>";
+      + construireLaLigneDeBilan(craft, bilan);
 
     carte.querySelector('[data-action="supprimer"]').addEventListener("click", () => {
       etatApplication.craftsDeLaSession = etatApplication.craftsDeLaSession
@@ -140,6 +143,25 @@ function dessinerLesCraftsDeLaSession(analyse) {
       sauvegarderEtat();
       redessinerToutLEcran();
     });
+
+    // Changer la destination redessine la carte : les champs de vente ne sont
+    // pas les mêmes d'un mode à l'autre. Les prix déjà saisis sont conservés des
+    // deux côtés, on compare souvent l'unitaire et le lot avant de trancher.
+    carte.querySelector("[data-destination]").addEventListener("change", evenement => {
+      craft.destination = evenement.target.value;
+      sauvegarderEtat();
+      redessinerToutLEcran();
+    });
+
+    for (const champ of carte.querySelectorAll("[data-vente-taille-de-lot]")) {
+      champ.addEventListener("change", () => {
+        const taille = parseInt(champ.getAttribute("data-vente-taille-de-lot"), 10);
+        if (!craft.prixDeVenteParTailleDeLot) craft.prixDeVenteParTailleDeLot = {};
+        craft.prixDeVenteParTailleDeLot[taille] = interpreterSaisieDeMontant(champ.value);
+        sauvegarderEtat();
+        redessinerToutLEcran();
+      });
+    }
 
     for (const champ of carte.querySelectorAll("[data-champ]")) {
       champ.addEventListener("change", () => {
@@ -225,6 +247,7 @@ function construireLaCelluleDuNom(ligne) {
     + '<img src="' + echapperPourHtml(ligne.besoin.adresseIcone) + '" alt="">'
     + "<span>" + echapperPourHtml(ligne.besoin.nom)
     + construireLaPastilleDeProvenance(ligne)
+    + construireLaPastilleDeQuarantaine(ligne)
     + construireLaMentionDeDesaccord(ligne)
     + mentionDeLAge
     + "</span></div></td>";
@@ -294,6 +317,8 @@ export function brancherLesSaisiesDePrixDUneRangee(rangee, ligne) {
   const identifiant = ligne.besoin.identifiantAnkama;
   const nomDeLaRessource = ligne.besoin.nom;
 
+  brancherLesCochesDeQuarantaine(rangee, identifiant, nomDeLaRessource);
+
   const controles = rangee.querySelectorAll(
     "[data-taille-de-lot], [data-prix-moyen], [data-taille-du-prix-moyen]");
 
@@ -349,4 +374,44 @@ async function publierEtRendreCompte(identifiant, nomDeLaRessource, prixUnitaire
   const resultat = await publierUnPrixUnitaire(identifiant, nomDeLaRessource, prixUnitaire);
   annoncer(resultat.message, resultat.publie ? "succes" : "echec");
   redessinerToutLEcran();
+}
+
+/* ============================================================
+   Coches de confirmation de l'OCR
+
+   Le seul chemin par lequel une valeur lue par la machine entre dans la base
+   personnelle, et donc le seul par lequel elle devient publiable. Un clic sur
+   la coche vaut « j'ai regardé ce chiffre ». À partir de là il est traité
+   comme une saisie au clavier, sans distinction — c'est l'intention.
+   ============================================================ */
+
+function brancherLesCochesDeQuarantaine(rangee, identifiant, nomDeLaRessource) {
+  for (const coche of rangee.querySelectorAll("[data-confirmer-ocr]")) {
+    coche.addEventListener("click", async () => {
+      const taille = parseInt(coche.getAttribute("data-confirmer-ocr"), 10);
+      annoncer("Confirmation de " + nomDeLaRessource + " \u00d7" + taille + "\u2026", "en-cours");
+      const resultat = await confirmerUnPrixEnQuarantaine(identifiant, nomDeLaRessource, taille);
+      annoncer(resultat.message, resultat.publie ? "succes" : null);
+      redessinerToutLEcran();
+    });
+  }
+
+  const pastilleDeConfirmation = rangee.querySelector("[data-confirmer-toute-la-ligne]");
+  if (pastilleDeConfirmation) {
+    pastilleDeConfirmation.addEventListener("click", async () => {
+      annoncer("Confirmation de " + nomDeLaRessource + "\u2026", "en-cours");
+      const resultat = await confirmerToutesLesValeursDUneRessource(identifiant, nomDeLaRessource);
+      annoncer(resultat.message, resultat.publie ? "succes" : null);
+      redessinerToutLEcran();
+    });
+  }
+
+  const pastilleDeRejet = rangee.querySelector("[data-oublier-quarantaine]");
+  if (pastilleDeRejet) {
+    pastilleDeRejet.addEventListener("click", () => {
+      oublierLaQuarantaine(identifiant);
+      annoncer("Lecture OCR de " + nomDeLaRessource + " jetée, rien n'est entré en base.");
+      redessinerToutLEcran();
+    });
+  }
 }

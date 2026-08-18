@@ -1,9 +1,34 @@
 # OCR des prix du HDV, cahier des charges
 
-**État : phase 0 passée le 18 08 2026, 95 % de lectures exactes au chiffre près,
-100 % avec liste blanche. Le seuil est atteint, la construction est ouverte.
-Résultat, et les trois corrections qu'il porte au plan ci-dessous :
-`outils/ocr-phase0/RESULTAT.md`.**
+**État : phases 0, 1 et 2 faites le 18 08 2026.**
+
+- **Phase 0**, la mesure : 95 % de lectures exactes au chiffre près, 100 % avec
+  liste blanche. Détail dans `outils/ocr-phase0/RESULTAT.md`.
+- **Phase 1**, côté Windows : `outils/hdv/`, une touche relève un popup et
+  remplit le presse-papier. Notice dans `outils/hdv/README.md`.
+- **Phase 2**, côté site : quarantaine, schéma 5, orange pointillé, coche de
+  confirmation, revue qui présente les lectures douteuses en premier.
+
+Reste la phase 3, le confort, à faire au fil de l'usage.
+
+**Trois écarts au plan ci-dessous, tous assumés, tous mesurés :**
+
+1. **Pas de calibration, des ancres.** Le plan prévoyait quatre rectangles
+   réglés une fois par résolution. Le popup se repère par la paire d'en-têtes
+   « Lot » et « prix », puis chaque rangée par son libellé de lot. Un rectangle
+   figé se décale dès que l'interface bouge d'un pixel ; une ancre suit le popup
+   où qu'il soit, et rien n'est à refaire en changeant d'écran.
+2. **Deux passes d'OCR.** La première trouve le popup, la seconde le relit seul
+   et agrandi ×3. Sur une capture de fenêtre entière, la passe large rate les
+   libellés les plus fins et la moitié des prix se perd avec eux.
+3. **Pré-traitement réduit à l'agrandissement ×3.** Le seuillage prévu ici fait
+   perdre les chiffres clairs sur fond texturé, mesure de la phase 0.
+
+**Une correction de fond au plan : les bornes de cohérence entre lots.** Elles
+étaient calquées sur la taille du lot, elles criaient donc au loup sur des prix
+parfaitement normaux — un lot de 10 valant moins de dix fois l'unité est la
+situation courante au HDV, c'est même la raison d'acheter en lot. La borne basse
+vaut désormais un cinquième de la taille du lot.
 
 Objectif : remplacer la saisie manuelle des quatre prix de lot par une touche.
 Rien d'autre. Le calcul, l'arbitrage des lots et la publication ne changent pas.
@@ -123,8 +148,8 @@ mauvais chiffre accepté, lui, contamine un calcul.
 - Champ vide, ou contenant autre chose que des chiffres et des espaces → rejet.
 - Prix nul ou négatif → rejet.
 - Prix hors de `[1, 100 000 000]` → rejet.
-- **Cohérence entre lots** : le prix d'un lot de 10 doit tomber entre 3 et 30
-  fois le ×1, celui d'un lot de 100 entre 30 et 300 fois. Hors bornes, la ligne
+- **Cohérence entre lots** : le prix d'un lot de 10 doit tomber entre 2 et 30
+  fois le ×1, celui d'un lot de 100 entre 20 et 300 fois. Hors bornes, la ligne
   passe en `confiance basse` — elle est mise en file, mais marquée, et la revue
   la présentera en premier. C'est le contrôle qui attrape le chiffre perdu ou en
   trop, l'erreur d'OCR la plus fréquente et la plus coûteuse.
@@ -208,9 +233,9 @@ serait le pire des deux mondes.
 
 | Phase | Contenu | Fin quand |
 |---|---|---|
-| **0** | Cinq captures, mesure du taux de lecture exacte. | Un chiffre au journal, et une décision go / mode proposition / arrêt. |
-| **1** | AHK : calibration, capture, OCR, contrôles, infobulle, file, presse-papier. | Une touche produit une ligne correcte dans le presse-papier, vérifiée à l'œil. |
-| **2** | Site : parseur, quarantaine, schéma 5, affichage orange, revue. | Un Ctrl+V remplit six ressources sans qu'aucun total ne bouge avant confirmation. |
+| **0** ✅ | Trois captures au lieu de cinq, mesure du taux de lecture exacte. | 95 %, décision go. `outils/ocr-phase0/RESULTAT.md`. |
+| **1** ✅ | AHK : capture, OCR, contrôles, infobulle, file, presse-papier. Calibration abandonnée au profit des ancres. | `outils/hdv/`. Lecture juste sur les trois captures réelles ; reste à éprouver sur une vraie séance. |
+| **2** ✅ | Site : parseur, quarantaine, schéma 5, affichage orange, coche, revue. | Vérifié par le test d'interface Playwright, du collage à la publication. |
 | **3** | Confort : retrait de la dernière entrée, relecture à deux seuillages pour la confiance, fusion avec `Dof.ahk`. | Au fil de l'usage. |
 
 Les phases 1 et 2 sont indépendantes : le format d'échange se tape à la main,

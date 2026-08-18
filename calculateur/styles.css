@@ -6,6 +6,8 @@
 
      violet   un prix relevé par Brice, partagé avec la base communautaire
      bleu     un prix venu de la base, en repère, remplaçable à la frappe
+     orange   un prix lu par l'OCR, en quarantaine, non confirmé. Il n'est ni
+              dans les totaux ni publiable : la coche est son seul passage
      neutre   un prix strictement local : lots de 10, 100, 1000, prix moyen
      vert     JAMAIS une provenance. Réservé aux montants gagnants et au fond
               des cellules que le calcul recommande d'acheter.
@@ -34,6 +36,8 @@
   --a-moi-sourd:      rgba(185, 140, 240, .16);
   --de-la-base:       #6fb7e0;
   --de-la-base-sourd: rgba(111, 183, 224, .13);
+  --en-quarantaine:   #e39a4a;
+  --quarantaine-sourd: rgba(227, 154, 74, .12);
 
   /* Recommandation d'achat */
   --fond-recommande:  rgba(182, 227, 74, .10);
@@ -182,6 +186,36 @@ input::placeholder { color: #4c574f; }
   color: var(--de-la-base); opacity: 1; font-style: italic;
 }
 
+/* Orange pointillé : lu par l'OCR, pas encore confirmé. Comme le bleu, la
+   valeur n'est qu'un texte de remplacement — le champ reste vide, donc rien
+   n'est enregistré au nom de Brice et la première frappe part d'un champ
+   propre. La coche à côté est le seul chemin vers la base personnelle. */
+.champ-prix-lot.prix-en-quarantaine, input.prix-en-quarantaine {
+  border-color: var(--en-quarantaine); border-style: dashed;
+  background: var(--quarantaine-sourd);
+}
+.champ-prix-lot.prix-en-quarantaine::placeholder, input.prix-en-quarantaine::placeholder {
+  color: var(--en-quarantaine); opacity: 1;
+}
+
+/* La coche de confirmation. Petite, à droite du champ, et présente seulement
+   quand une valeur attend : pas de bouton mort dans le tableau. */
+.cellule-avec-coche { display: flex; gap: 4px; align-items: center; }
+.coche-ocr {
+  flex: none; padding: 4px 7px; line-height: 1;
+  color: var(--en-quarantaine); background: var(--quarantaine-sourd);
+  border: 1px solid var(--en-quarantaine); border-radius: 6px;
+  font-size: 12px;
+}
+.coche-ocr:hover { color: var(--fond-page); background: var(--en-quarantaine); }
+
+.exposant-ocr { color: var(--en-quarantaine); }
+.alerte-ocr {
+  margin-top: 12px; padding: 8px 10px; font-size: 11px;
+  color: var(--en-quarantaine); background: var(--quarantaine-sourd);
+  border: 1px dashed var(--en-quarantaine); border-radius: 8px;
+}
+
 /* ---- Recommandation d'achat : le fond de la cellule ---- */
 .tableau-ressources td.cellule-recommandee {
   background: var(--fond-recommande);
@@ -209,6 +243,22 @@ input::placeholder { color: #4c574f; }
 .pastille-envoi     { color: var(--texte-attenue); }
 .pastille-echec     { color: var(--perte); }
 .pastille-desaccord { color: var(--alerte); border-style: dashed; }
+.pastille-quarantaine {
+  color: var(--en-quarantaine); border-style: dashed; cursor: pointer;
+}
+.pastille-quarantaine:hover { color: var(--fond-page); background: var(--en-quarantaine); }
+.pastille-douteuse { color: var(--perte); font-weight: 600; }
+.pastille-rejet { color: var(--texte-attenue); cursor: pointer; margin-left: 2px; }
+.pastille-rejet:hover { color: var(--perte); }
+
+/* ---- Vente d'un craft ---- */
+.selecteur-destination {
+  font: inherit; color: var(--texte); background: var(--fond-champ);
+  border: 1px solid var(--bordure); border-radius: 7px; padding: 6px 8px; width: 100%;
+  cursor: pointer;
+}
+.selecteur-destination:focus { outline: none; border-color: var(--accent); }
+.champ-vente-lot { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---- Revue de revalidation, et réglages ---- */
 .voile-revue {
@@ -260,6 +310,13 @@ input::placeholder { color: #4c574f; }
 .echantillon-a-moi { border-color: var(--a-moi); background: var(--a-moi-sourd); }
 .echantillon-base { border-color: var(--de-la-base); border-style: dashed; }
 .echantillon-recommande { background: var(--fond-recommande); box-shadow: inset 2px 0 0 var(--accent); }
+.echantillon-quarantaine {
+  border-color: var(--en-quarantaine); border-style: dashed; background: var(--quarantaine-sourd);
+}
+.marque-empilable {
+  font-size: 9px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--en-quarantaine); border: 1px solid currentColor; border-radius: 4px; padding: 0 3px;
+}
 
 .colonne-chiffre { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mention-composition { font-size: 11px; color: var(--texte-attenue); white-space: nowrap; }

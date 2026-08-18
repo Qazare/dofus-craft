@@ -22,6 +22,7 @@ import { etatApplication, sauvegarderEtat, obtenirOuCreerLaFichePrix,
          deduireLePrixMoyenUnitaire } from "./etat.js";
 import { analyserLaSessionComplete } from "./analyse.js";
 import { obtenirLePrixCommunautaire } from "./prix-communautaires.js";
+import { lireLaQuarantaine, lireLeMontantEnQuarantaine, oublierLaQuarantaine } from "./quarantaine.js";
 import { formaterNombreSimple, interpreterSaisieDeMontant, calculerAgeEnJoursDepuis,
          formulerLAge, echapperPourHtml } from "./formats.js";
 import { redessinerToutLEcran } from "./vue.js";
@@ -42,7 +43,12 @@ let voile = null;
  * lui-même. Il apparaît en repère dans le champ, rien de plus.
  */
 export function etablirLaListeDesRessourcesARevoir() {
-  return analyserLaSessionComplete().lignesDeRessources.filter(ligne => {
+  const aRevoir = analyserLaSessionComplete().lignesDeRessources.filter(ligne => {
+    // Une lecture d'OCR en attente rend la ressource à revoir, quelle que soit
+    // la fraîcheur de son prix : c'est précisément le chiffre qu'il faut
+    // regarder, et la revue est l'endroit fait pour ça.
+    if (lireLaQuarantaine(ligne.besoin.identifiantAnkama)) return true;
+
     const fichePrix = etatApplication.basePrixDesRessources[ligne.besoin.identifiantAnkama];
     if (!fichePrix) return true;
 
@@ -53,6 +59,19 @@ export function etablirLaListeDesRessourcesARevoir() {
     const age = calculerAgeEnJoursDepuis(fichePrix.horodatageDerniereMiseAJour);
     return age === null || age >= NOMBRE_DE_JOURS_AVANT_PRIX_CONSIDERE_ANCIEN;
   });
+
+  // Ordre de passage : les lectures douteuses d'abord, les autres lectures
+  // d'OCR ensuite, le reste après. Une incohérence entre lots est l'erreur la
+  // plus coûteuse du lot — un chiffre perdu ou en trop — et c'est celle qu'on
+  // veut voir tant qu'on a encore le HDV sous les yeux.
+  return aRevoir.sort((a, b) =>
+    rangDePriorite(a.besoin.identifiantAnkama) - rangDePriorite(b.besoin.identifiantAnkama));
+}
+
+function rangDePriorite(identifiantAnkama) {
+  const enAttente = lireLaQuarantaine(identifiantAnkama);
+  if (!enAttente) return 2;
+  return enAttente.confianceBasse ? 0 : 1;
 }
 
 export function ouvrirLaRevue() {
@@ -100,8 +119,13 @@ function dessinerLEtapeCourante() {
   const identifiant = ligne.besoin.identifiantAnkama;
   const fichePrix = etatApplication.basePrixDesRessources[identifiant];
 
-  const prixMoyenDuLot = fichePrix ? (fichePrix.prixMoyenDuLot || 0) : 0;
+  const lectureOcrPourLePrixMoyen = lireLaQuarantaine(identifiant);
+  const prixMoyenDejaEnBase = fichePrix ? (fichePrix.prixMoyenDuLot || 0) : 0;
+  const prixMoyenDuLot = prixMoyenDejaEnBase > 0
+    ? prixMoyenDejaEnBase
+    : (lectureOcrPourLePrixMoyen ? (lectureOcrPourLePrixMoyen.prixMoyenDuLot || 0) : 0);
   const tailleDuLotDuPrixMoyen = (fichePrix && fichePrix.tailleDuLotDuPrixMoyen)
+    || (lectureOcrPourLePrixMoyen && lectureOcrPourLePrixMoyen.tailleDuLotDuPrixMoyen)
     || TAILLE_DE_LOT_PAR_DEFAUT_POUR_LE_PRIX_MOYEN;
 
   const releveDeLaBase = obtenirLePrixCommunautaire(identifiant);
@@ -113,24 +137,41 @@ function dessinerLEtapeCourante() {
       + (taille === tailleDuLotDuPrixMoyen ? " selected" : "") + ">×" + taille + "</option>")
     .join("");
 
+  const lectureOcr = lireLaQuarantaine(identifiant);
+
   let champsDesLots = "";
   for (const taille of TAILLES_DE_LOT_DISPONIBLES) {
     const prixDeCeLot = (fichePrix && fichePrix.prixParTailleDeLot)
       ? (fichePrix.prixParTailleDeLot[taille] || 0) : 0;
     const estLeChampPartage = taille === TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE;
+    const montantLuParLOcr = lireLeMontantEnQuarantaine(identifiant, taille);
+
+    // Ici, et ici seulement, une valeur d'OCR PRÉ-REMPLIT le champ au lieu de
+    // rester en texte de remplacement : la revue est le moment où Brice la
+    // regarde, Entrée vaut confirmation, et toute frappe la remplace. Le champ
+    // est sélectionné, donc taper par-dessus n'oblige à effacer quoi que ce soit.
+    const valeurAffichee = prixDeCeLot > 0
+      ? formaterNombreSimple(prixDeCeLot)
+      : (montantLuParLOcr > 0 ? formaterNombreSimple(montantLuParLOcr) : "");
 
     // Seul le ×1 porte un repère venu de la base, puisque c'est le seul prix
     // qu'elle connaisse.
     const repere = estLeChampPartage && prixDeCeLot <= 0 && releveDeLaBase
       ? formaterNombreSimple(releveDeLaBase.prixUnitaire) : "–";
 
+    let classeDuChamp = "";
+    if (prixDeCeLot > 0) classeDuChamp = estLeChampPartage ? "prix-a-moi" : "";
+    else if (montantLuParLOcr > 0) classeDuChamp = "prix-en-quarantaine";
+    else if (estLeChampPartage && releveDeLaBase) classeDuChamp = "prix-de-la-base";
+
     champsDesLots +=
       '<div class="champ-etiquete champ-revue"><label class="etiquette">Lot de ' + taille
-      + (estLeChampPartage ? ' <span class="exposant">partagé</span>' : "") + "</label>"
+      + (estLeChampPartage ? ' <span class="exposant">partagé</span>' : "")
+      + (montantLuParLOcr > 0 && prixDeCeLot <= 0
+          ? ' <span class="exposant exposant-ocr">ocr</span>' : "") + "</label>"
       + '<input data-revue-taille-de-lot="' + taille + '"'
-      + ' class="' + (estLeChampPartage
-          ? (prixDeCeLot > 0 ? "prix-a-moi" : (releveDeLaBase ? "prix-de-la-base" : "")) : "") + '"'
-      + ' value="' + (prixDeCeLot ? formaterNombreSimple(prixDeCeLot) : "")
+      + ' class="' + classeDuChamp + '"'
+      + ' value="' + valeurAffichee
       + '" placeholder="' + repere + '"></div>';
   }
 
@@ -151,6 +192,11 @@ function dessinerLEtapeCourante() {
               : " · aucun relevé dans la base")
         + "</div></div>"
       + "</div>"
+      + (lectureOcr && lectureOcr.confianceBasse
+          ? '<div class="alerte-ocr">Lecture OCR douteuse : '
+            + echapperPourHtml((lectureOcr.anomalies || []).join(" ; "))
+            + ". Vérifie au HDV avant de valider.</div>"
+          : "")
       + '<div class="grille-champs-revue">'
         + '<div class="champ-etiquete champ-revue"><label class="etiquette">Prix moyen du lot</label>'
           + '<div class="cellule-prix-moyen">'
@@ -163,6 +209,8 @@ function dessinerLEtapeCourante() {
       + "</div>"
       + '<div class="aide-clavier"><kbd>Entrée</kbd> valider et passer au suivant · '
         + "<kbd>Tab</kbd> champ suivant · <kbd>Échap</kbd> fermer la revue"
+        + (lectureOcr
+            ? " · <strong>Entrée confirme la lecture OCR</strong>, toute frappe la remplace" : "")
         + (laPublicationEstPossible()
             ? ' · le <strong>lot de 1</strong> part vers la base' : "")
       + "</div>"
@@ -201,6 +249,12 @@ async function validerEtPasserALaSuivante() {
   // rafraîchi dans tous les cas, sinon la ressource reviendrait à la prochaine
   // revue alors qu'elle vient d'être contrôlée.
   fichePrix.horodatageDerniereMiseAJour = Date.now();
+
+  // La lecture d'OCR a fait son travail : ce qu'elle proposait vient d'être
+  // repris ou corrigé par Brice, et se trouve maintenant dans la base. La
+  // laisser en quarantaine ferait réapparaître une bordure orange sur une
+  // valeur désormais confirmée.
+  oublierLaQuarantaine(identifiant);
   sauvegarderEtat();
 
   // Publication seulement si le prix unitaire a réellement bougé : revalider un

@@ -6,3 +6,6 @@ outils/apercu.png
 # Brice en jeu. Dépôt public, elles restent en local. Le chiffre qu'elles ont
 # produit est dans outils/ocr-phase0/RESULTAT.md.
 outils/ocr-phase0/captures/
+
+# Journal des captures de la releve HDV : des PNG du jeu, produits a chaque touche.
+outils/hdv/journal/

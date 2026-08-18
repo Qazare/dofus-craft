@@ -154,3 +154,118 @@ export function calculerLApprovisionnementDUneRessource(quantiteNecessaire, entr
   if (prixMoyenUnitaire > 0) return estimation(prixMoyenUnitaire, "prix moyen");
   return null;
 }
+
+/* ============================================================
+   Vente par lot
+
+   Miroir de l'achat, avec une asymétrie qui change tout : à l'achat on peut
+   prendre PLUS que nécessaire, parce qu'un surplus reste une ressource qu'on
+   garde. À la vente, on ne peut pas vendre plus qu'on n'a crafté. Le
+   partitionnement est donc EXACT, et ce qui ne rentre dans aucun lot n'est pas
+   arrondi : il reste invendu, et ne rapporte rien.
+
+   Conséquence pratique, et c'est le cas courant : sans prix ×1, un reliquat de
+   7 objets sur un lot de 10 ne se vend pas. Le calcul le dit au lieu de
+   l'inventer, parce qu'un revenu supposé sur une vente impossible fausserait la
+   décision de crafter.
+   ============================================================ */
+
+/**
+ * Détermine le découpage en lots qui rapporte le plus pour une quantité donnée.
+ *
+ * @param {number} quantiteAVendre
+ * @param {Object} prixParTailleDeLot  taille de lot vers prix du lot entier
+ * @returns {{revenuBrut:number, compositionDesVentes:Object, quantiteInvendue:number,
+ *            prixUnitaireEffectif:number}|null}  null si aucun prix n'est saisi
+ */
+export function calculerLaVenteLaPlusRentable(quantiteAVendre, prixParTailleDeLot) {
+  const lotsVendables = TAILLES_DE_LOT_DISPONIBLES
+    .map(taille => ({ taille, prix: prixParTailleDeLot ? (prixParTailleDeLot[taille] || 0) : 0 }))
+    .filter(lot => lot.prix > 0);
+
+  if (lotsVendables.length === 0) return null;
+  if (quantiteAVendre <= 0) {
+    return { revenuBrut: 0, compositionDesVentes: {}, quantiteInvendue: 0, prixUnitaireEffectif: 0 };
+  }
+
+  // Au-delà du seuil de programmation dynamique, on retombe sur le glouton par
+  // meilleur prix unitaire. Même garde-fou qu'à l'achat, et même raison.
+  if (quantiteAVendre > QUANTITE_MAXIMALE_TRAITEE_PAR_PROGRAMMATION_DYNAMIQUE) {
+    return calculerLaVenteParHeuristiqueGloutonne(quantiteAVendre, lotsVendables);
+  }
+
+  // revenuMaximalPourQuantite[q] = revenu maximal en vendant AU PLUS q unités.
+  const revenuMaximalPourQuantite = new Float64Array(quantiteAVendre + 1);
+  const dernierLotVenduPourQuantite = new Int32Array(quantiteAVendre + 1);
+
+  for (let quantite = 1; quantite <= quantiteAVendre; quantite++) {
+    // Option de repli, toujours disponible : laisser cette unité-là invendue.
+    // C'est elle qui rend le calcul correct quand aucun lot ne tombe juste.
+    let meilleurRevenu = revenuMaximalPourQuantite[quantite - 1];
+    let meilleureTailleDeLot = 0;
+
+    for (const lot of lotsVendables) {
+      if (lot.taille > quantite) continue;
+      const revenuCandidat = lot.prix + revenuMaximalPourQuantite[quantite - lot.taille];
+      if (revenuCandidat > meilleurRevenu) {
+        meilleurRevenu = revenuCandidat;
+        meilleureTailleDeLot = lot.taille;
+      }
+    }
+
+    revenuMaximalPourQuantite[quantite] = meilleurRevenu;
+    dernierLotVenduPourQuantite[quantite] = meilleureTailleDeLot;
+  }
+
+  const compositionDesVentes = {};
+  let quantiteInvendue = 0;
+  let quantiteRestanteAReconstituer = quantiteAVendre;
+
+  while (quantiteRestanteAReconstituer > 0) {
+    const tailleChoisie = dernierLotVenduPourQuantite[quantiteRestanteAReconstituer];
+    if (tailleChoisie === 0) {
+      // Unité laissée de côté par le calcul : aucun lot ne la valorisait.
+      quantiteInvendue++;
+      quantiteRestanteAReconstituer--;
+    } else {
+      compositionDesVentes[tailleChoisie] = (compositionDesVentes[tailleChoisie] || 0) + 1;
+      quantiteRestanteAReconstituer -= tailleChoisie;
+    }
+  }
+
+  const revenuBrut = revenuMaximalPourQuantite[quantiteAVendre];
+  return {
+    revenuBrut,
+    compositionDesVentes,
+    quantiteInvendue,
+    prixUnitaireEffectif: revenuBrut / quantiteAVendre
+  };
+}
+
+/** Repli pour les très grandes quantités : meilleur prix unitaire d'abord. */
+export function calculerLaVenteParHeuristiqueGloutonne(quantiteAVendre, lotsVendables) {
+  const lotsTriesParPrixUnitaire = lotsVendables
+    .slice().sort((a, b) => (b.prix / b.taille) - (a.prix / a.taille));
+
+  const compositionDesVentes = {};
+  let quantiteRestante = quantiteAVendre;
+  let revenuBrut = 0;
+
+  for (const lot of lotsTriesParPrixUnitaire) {
+    const nombreDeLotsEntiers = Math.floor(quantiteRestante / lot.taille);
+    if (nombreDeLotsEntiers > 0) {
+      compositionDesVentes[lot.taille] = nombreDeLotsEntiers;
+      revenuBrut += nombreDeLotsEntiers * lot.prix;
+      quantiteRestante -= nombreDeLotsEntiers * lot.taille;
+    }
+  }
+
+  return {
+    revenuBrut,
+    compositionDesVentes,
+    // Contrairement à l'achat, le reliquat n'est pas complété par un lot de plus :
+    // on ne peut pas vendre ce qu'on n'a pas crafté.
+    quantiteInvendue: quantiteRestante,
+    prixUnitaireEffectif: revenuBrut / quantiteAVendre
+  };
+}
