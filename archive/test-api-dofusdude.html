@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Test CORS - API DofusDude</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    background: #0d1117; color: #d7dde3;
+    margin: 0; padding: 24px; line-height: 1.55;
+  }
+  h1 { font-size: 16px; letter-spacing: .04em; text-transform: uppercase; color: #a8d84a; margin: 0 0 4px; }
+  p.sous-titre { margin: 0 0 24px; color: #7a8590; font-size: 13px; }
+  .bloc-resultat {
+    border: 1px solid #232b33; border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 14px; background: #121820;
+  }
+  .titre-test { font-size: 13px; color: #9aa5b1; margin-bottom: 8px; }
+  .verdict { font-size: 15px; font-weight: 600; }
+  .succes { color: #7fd858; }
+  .echec  { color: #ff6b6b; }
+  .attente { color: #d8bb4a; }
+  pre {
+    white-space: pre-wrap; word-break: break-word;
+    background: #0a0e13; border: 1px solid #1c232b; border-radius: 6px;
+    padding: 10px; font-size: 12px; color: #93a1ad; margin: 10px 0 0; max-height: 260px; overflow: auto;
+  }
+  .aide { font-size: 12px; color: #7a8590; margin-top: 20px; border-top: 1px solid #232b33; padding-top: 14px; }
+</style>
+</head>
+<body>
+
+<h1>Test de joignabilité de l'API DofusDude</h1>
+<p class="sous-titre">
+  Objectif unique : savoir si ce fichier, ouvert en local, a le droit d'appeler api.dofusdu.de.
+  Origine de la page : <strong id="origineDeLaPage"></strong>
+</p>
+
+<div class="bloc-resultat">
+  <div class="titre-test">Test 1 — Recherche d'un équipement et de sa recette (Coiffe du Boufcoul)</div>
+  <div class="verdict attente" id="verdictTestEquipement">En cours...</div>
+  <pre id="detailTestEquipement"></pre>
+</div>
+
+<div class="bloc-resultat">
+  <div class="titre-test">Test 2 — Recherche d'une ressource par son nom (Laine du Boufcoul)</div>
+  <div class="verdict attente" id="verdictTestRessource">En cours...</div>
+  <pre id="detailTestRessource"></pre>
+</div>
+
+<div class="aide">
+  Si les deux tests passent, l'outil pourra interroger l'API directement depuis ton disque, sans serveur.<br>
+  Si tu vois « échec réseau ou CORS », ouvre la console (F12) et copie-moi le message rouge : il dira si c'est
+  un refus CORS, un blocage réseau, ou l'API elle-même qui est tombée.
+</div>
+
+<script>
+"use strict";
+
+// Adresse de base de l'API publique DofusDude, version Dofus 3, libellés en français.
+const ADRESSE_BASE_API_DOFUSDUDE = "https://api.dofusdu.de/dofus3/v1/fr";
+
+/**
+ * Affiche le résultat d'un test dans son bloc dédié.
+ * @param {string} identifiantVerdict  id de l'élément qui porte le verdict court
+ * @param {string} identifiantDetail   id de l'élément <pre> qui porte le détail
+ * @param {boolean} testReussi         true si l'appel a abouti
+ * @param {string} messageVerdict      texte court affiché en gros
+ * @param {string} texteDetaille       contenu brut affiché en dessous
+ */
+function afficherResultatDuTest(identifiantVerdict, identifiantDetail, testReussi, messageVerdict, texteDetaille) {
+  const elementVerdict = document.getElementById(identifiantVerdict);
+  elementVerdict.textContent = messageVerdict;
+  elementVerdict.className = "verdict " + (testReussi ? "succes" : "echec");
+  document.getElementById(identifiantDetail).textContent = texteDetaille;
+}
+
+/**
+ * Appelle un point d'entrée de l'API et rend compte du succès ou de la nature de l'échec.
+ * Un refus CORS se manifeste par un TypeError « Failed to fetch », indiscernable
+ * d'une coupure réseau côté JavaScript : c'est la console du navigateur qui tranche.
+ */
+async function executerUnTestDApi(cheminRelatif, identifiantVerdict, identifiantDetail, descriptionAttendue) {
+  const adresseComplete = ADRESSE_BASE_API_DOFUSDUDE + cheminRelatif;
+
+  try {
+    const reponseHttp = await fetch(adresseComplete);
+
+    if (!reponseHttp.ok) {
+      afficherResultatDuTest(
+        identifiantVerdict, identifiantDetail, false,
+        "Réponse reçue mais code d'erreur HTTP " + reponseHttp.status,
+        "URL appelée :\n" + adresseComplete +
+        "\n\nLa requête est bien sortie du navigateur, donc le CORS n'est pas en cause. " +
+        "C'est l'API qui a répondu par une erreur."
+      );
+      return;
+    }
+
+    const donneesJson = await reponseHttp.json();
+    const premierResultat = Array.isArray(donneesJson) ? donneesJson[0] : donneesJson;
+
+    afficherResultatDuTest(
+      identifiantVerdict, identifiantDetail, true,
+      "Réussite. " + descriptionAttendue,
+      "URL appelée :\n" + adresseComplete +
+      "\n\nRéponse :\n" + JSON.stringify(premierResultat, null, 2)
+    );
+
+  } catch (erreurAttrapee) {
+    afficherResultatDuTest(
+      identifiantVerdict, identifiantDetail, false,
+      "Échec réseau ou CORS",
+      "URL appelée :\n" + adresseComplete +
+      "\n\nErreur JavaScript :\n" + erreurAttrapee.name + " : " + erreurAttrapee.message +
+      "\n\nOuvre la console avec F12 pour connaître la cause exacte."
+    );
+  }
+}
+
+// L'origine vaut "null" quand la page est ouverte en file://, ce qui est précisément
+// le cas de figure que ce test cherche à valider.
+document.getElementById("origineDeLaPage").textContent = window.location.origin || "null (fichier local)";
+
+executerUnTestDApi(
+  "/items/equipment/search?query=" + encodeURIComponent("Coiffe du Boufcoul") + "&limit=1",
+  "verdictTestEquipement", "detailTestEquipement",
+  "La recette doit contenir 6 ingrédients."
+);
+
+executerUnTestDApi(
+  "/items/resources/search?query=" + encodeURIComponent("Laine du Boufcoul") + "&limit=1",
+  "verdictTestRessource", "detailTestRessource",
+  "La ressource doit porter l'identifiant Ankama 7905."
+);
+</script>
+
+</body>
+</html>
