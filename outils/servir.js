@@ -7,7 +7,7 @@
  */
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
+import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const RACINE = join(fileURLToPath(new URL(".", import.meta.url)), "..", "calculateur");
@@ -26,7 +26,11 @@ createServer(async (requete, reponse) => {
   // ../.. servirait n'importe quel fichier du disque.
   const cheminDemande = normalize(decodeURIComponent(new URL(requete.url, "http://x").pathname))
     .replace(/^(\.\.[/\\])+/, "");
-  const cheminFichier = join(RACINE, cheminDemande === "/" ? "index.html" : cheminDemande);
+  // Le séparateur dépend de la plateforme : `normalize("/")` rend "\\" sous
+  // Windows et "/" ailleurs. Comparer au littéral "/" laissait donc la racine
+  // sans index sur le PC. On teste la fin du chemin, pas sa forme exacte.
+  const viseUnDossier = cheminDemande === sep || cheminDemande.endsWith(sep);
+  const cheminFichier = join(RACINE, viseUnDossier ? cheminDemande + "index.html" : cheminDemande);
 
   try {
     const contenu = await readFile(cheminFichier);
