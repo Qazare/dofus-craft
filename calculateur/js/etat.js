@@ -38,6 +38,11 @@ import {
  *     fichier servi avec le site, complet et identique pour tout le monde. La
  *     recopier dans l'état sauvegardé alourdirait chaque écriture du stockage
  *     local de soixante-dix kilo-octets qui ne sont propres à personne.
+ * 7 : l'XP de métier. `experienceParMetier` retient où Brice en est dans chaque
+ *     métier, et `memoireExperienceParRecette` cesse d'être un simple nombre
+ *     pour devenir une OBSERVATION datée d'un niveau : `{ xpObservee,
+ *     niveauMetierObserve }`. Sans le niveau, le chiffre ne vaut qu'à ce
+ *     niveau-là et ne peut être projeté nulle part.
  *
  * Toute évolution du format incrémente ce numéro et ajoute son étape dans
  * `migrerLEtatVersLeSchemaCourant`.
@@ -69,6 +74,13 @@ export function construireUnEtatVierge() {
     // publication, sans qu'aucun drapeau n'ait à être testé nulle part.
     prixOcrEnAttente: {},
     cacheDesObjets: {},
+    // Où en est chaque métier, indexé par `jobId`. La clé est l'XP cumulée :
+    // le niveau s'en déduit, l'inverse serait faux puisqu'un niveau ne dit pas
+    // où l'on en est dans le palier.
+    experienceParMetier: {},
+    // Observations d'XP par recette : `{ xpObservee, niveauMetierObserve }`.
+    // Le niveau d'observation est ce qui rend le chiffre projetable, la
+    // régression se déduisant de l'écart entre ce niveau et celui de la recette.
     memoireExperienceParRecette: {}
   };
 }
@@ -229,8 +241,65 @@ export function migrerLEtatVersLeSchemaCourant() {
     console.info("Schéma 5 vers 6 : les crafts existants deviennent des crafts de tête.");
   }
 
+  // --- 6 vers 7 : l'XP relevée devient une observation située ---
+  //
+  // Les anciennes valeurs sont de simples nombres, sans le niveau de métier
+  // auquel elles ont été vues. Ce niveau ne s'invente pas : sans lui, la
+  // régression ne peut pas être défaite, et projeter la valeur à un autre
+  // niveau donnerait un chiffre faux présenté comme sûr. Le champ est donc
+  // laissé à null, et l'interface le réclame — une case à remplir vaut mieux
+  // qu'une extrapolation muette.
+  if (versionDeLEtatCharge < 7) {
+    const memoire = etatApplication.memoireExperienceParRecette || {};
+    for (const identifiant of Object.keys(memoire)) {
+      if (typeof memoire[identifiant] === "number") {
+        memoire[identifiant] = { xpObservee: memoire[identifiant], niveauMetierObserve: null };
+      }
+    }
+    if (!etatApplication.experienceParMetier) etatApplication.experienceParMetier = {};
+    console.info("Schéma 6 vers 7 : les XP relevées attendent leur niveau d'observation.");
+  }
+
   etatApplication.versionDuSchema = VERSION_COURANTE_DU_SCHEMA;
   sauvegarderEtat();
+}
+
+/* ============================================================
+   Observations d'XP et niveaux de métier
+   ============================================================ */
+
+/** Observation d'XP enregistrée pour une recette, jamais null. */
+export function lireLObservationDXP(identifiantAnkama) {
+  const memoire = etatApplication.memoireExperienceParRecette || {};
+  const observation = memoire[identifiantAnkama];
+  if (!observation) return { xpObservee: 0, niveauMetierObserve: null };
+  // Une valeur de schéma 6 peut encore traîner si l'état vient d'un import non
+  // migré. La lire ici plutôt que de supposer que la migration est passée.
+  if (typeof observation === "number") {
+    return { xpObservee: observation, niveauMetierObserve: null };
+  }
+  return observation;
+}
+
+export function enregistrerLObservationDXP(identifiantAnkama, xpObservee, niveauMetierObserve) {
+  if (!etatApplication.memoireExperienceParRecette) {
+    etatApplication.memoireExperienceParRecette = {};
+  }
+  etatApplication.memoireExperienceParRecette[identifiantAnkama] = {
+    xpObservee: xpObservee || 0,
+    niveauMetierObserve: niveauMetierObserve || null
+  };
+}
+
+/** XP cumulée dans un métier, 0 tant que Brice ne l'a pas renseignée. */
+export function lireLExperienceDUnMetier(identifiantDuMetier) {
+  const parMetier = etatApplication.experienceParMetier || {};
+  return parMetier[identifiantDuMetier] || 0;
+}
+
+export function enregistrerLExperienceDUnMetier(identifiantDuMetier, experienceTotale) {
+  if (!etatApplication.experienceParMetier) etatApplication.experienceParMetier = {};
+  etatApplication.experienceParMetier[identifiantDuMetier] = Math.max(0, experienceTotale || 0);
 }
 
 /**

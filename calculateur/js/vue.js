@@ -7,7 +7,8 @@
  */
 import { TAILLES_DE_LOT_DISPONIBLES, TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE,
          NOMBRE_DE_JOURS_AVANT_PRIX_CONSIDERE_ANCIEN } from "./config.js";
-import { etatApplication, sauvegarderEtat, obtenirOuCreerLaFichePrix } from "./etat.js";
+import { etatApplication, sauvegarderEtat, obtenirOuCreerLaFichePrix,
+         enregistrerLObservationDXP, enregistrerLExperienceDUnMetier } from "./etat.js";
 import { analyserLaSessionComplete } from "./analyse.js";
 import { formaterMontantEnKamas, formaterNombreSimple, interpreterSaisieDeMontant,
          calculerAgeEnJoursDepuis, echapperPourHtml } from "./formats.js";
@@ -19,7 +20,10 @@ import { construireLeSelecteurDeDestination, construireLesChampsDeVente,
 import { construireLaPastilleDeQuarantaine } from "./cellules-de-prix.js";
 import { construireLEnteteDeCraft, construireLaListeDesIngredients,
          construireLArbitrageCraftOuAchat, construireLeNomCopiable,
-         construireLaPastilleDeMetier } from "./cartes-de-craft.js";
+         construireLaPastilleDeMetier, construireLeCalibrageDXP,
+         construireLaLigneDXP } from "./cartes-de-craft.js";
+import { chiffrerLXPDUnCraft, listerLesMetiersDeLaSession,
+         leNiveauEstInterpole } from "./xp-session.js";
 import { crafterUneRessourceSurPlace, retirerUnCraftEtSaDescendance } from "./crafts.js";
 import { lireLaRecetteConnue } from "./metiers.js";
 import { brancherLaCopieDesNoms } from "./presse-papier.js";
@@ -31,6 +35,8 @@ import { annoncer } from "./journal.js";
 let bandeauResultats = null;
 let conteneurCrafts = null;
 let conteneurRessources = null;
+let conteneurRessourcesCraftees = null;
+let conteneurMetiers = null;
 
 /** Redessin de la fenêtre flottante, enregistré par elle pour éviter un cycle. */
 let redessinerLaFenetreSecondaire = null;
@@ -39,6 +45,8 @@ export function installerLaVue(elements) {
   bandeauResultats = elements.bandeauResultats;
   conteneurCrafts = elements.conteneurCrafts;
   conteneurRessources = elements.conteneurRessources;
+  conteneurRessourcesCraftees = elements.conteneurRessourcesCraftees;
+  conteneurMetiers = elements.conteneurMetiers;
 }
 
 export function enregistrerLeRedessinSecondaire(fonction) {
@@ -48,6 +56,7 @@ export function enregistrerLeRedessinSecondaire(fonction) {
 export function redessinerToutLEcran() {
   const analyse = analyserLaSessionComplete();
   dessinerLeBandeauDeResultats(analyse);
+  dessinerLesMetiers();
   dessinerLesCraftsDeLaSession(analyse);
   dessinerLeTableauDesRessources(analyse);
   if (redessinerLaFenetreSecondaire) redessinerLaFenetreSecondaire();
@@ -106,6 +115,68 @@ function dessinerLeBandeauDeResultats(analyse) {
 }
 
 /* ============================================================
+   Métiers de la session
+
+   L'XP CUMULÉE EST LA CLÉ, PAS LE NIVEAU
+
+   Le niveau se déduit de l'XP, l'inverse est faux : un niveau ne dit pas où
+   l'on en est dans le palier, et c'est précisément ce reste qui décide du
+   nombre de crafts. On saisit donc l'XP totale telle que le jeu l'affiche, et
+   le niveau s'affiche à côté — ce qui en fait aussi la vérification de la table.
+   ============================================================ */
+
+function dessinerLesMetiers() {
+  if (!conteneurMetiers) return;
+
+  const metiers = listerLesMetiersDeLaSession();
+  const section = conteneurMetiers.closest(".section-metiers");
+  if (section) section.hidden = metiers.length === 0;
+  if (metiers.length === 0) {
+    conteneurMetiers.innerHTML = "";
+    return;
+  }
+
+  conteneurMetiers.innerHTML = "";
+
+  for (const metier of metiers) {
+    const carte = document.createElement("div");
+    carte.className = "carte-metier";
+
+    // Le seuil interpolé est signalé : la table le donne pour les niveaux
+    // impairs, où le redécoupage d'Ankama n'est pas connu. Mieux vaut le dire
+    // que de présenter comme sûr un chiffre qui ne l'est pas.
+    const reserve = leNiveauEstInterpole(metier.niveau)
+      ? ' <span class="pastille pastille-approximatif" title="Le seuil de ce niveau'
+        + ' est interpolé, pas relevé. Le niveau voisin est sûr.">approx.</span>'
+      : "";
+
+    const progression = metier.estAuNiveauMaximal
+      ? '<span class="attenue">niveau maximal atteint</span>'
+      : '<span class="attenue">' + formaterNombreSimple(metier.xpRestantePourLeNiveau)
+        + " XP pour le niveau " + (metier.niveau + 1) + "</span>";
+
+    carte.innerHTML =
+      '<div class="entete-metier"><strong>' + echapperPourHtml(metier.nom) + "</strong>"
+        + '<span class="niveau-metier">niveau ' + metier.niveau + "</span>" + reserve + "</div>"
+      + '<div class="champ-etiquete"><label class="etiquette" title="L\'XP totale du métier,'
+        + ' telle que le jeu l\'affiche">XP cumulée</label>'
+        + '<input data-xp-metier="' + metier.identifiantDuMetier + '" value="'
+        + (metier.experienceTotale ? metier.experienceTotale : "") + '" placeholder="ex. 62491"></div>'
+      + '<div class="progression-metier">' + progression + "</div>";
+
+    const champ = carte.querySelector("[data-xp-metier]");
+    champ.addEventListener("change", () => {
+      enregistrerLExperienceDUnMetier(
+        metier.identifiantDuMetier, interpreterSaisieDeMontant(champ.value));
+      sauvegarderEtat();
+      redessinerToutLEcran();
+    });
+
+    conteneurMetiers.appendChild(carte);
+  }
+}
+
+/* ============================================================
    Cartes de craft
    ============================================================ */
 
@@ -131,8 +202,20 @@ function dessinerLesCraftsDeLaSession(analyse) {
   brancherLaCopieDesNoms(conteneurCrafts);
 }
 
+/**
+ * Objectif de niveau choisi par carte.
+ *
+ * Gardé ici et non dans l'état sauvegardé : c'est une question qu'on se pose en
+ * regardant l'écran — « et si je montais jusqu'à 60 ? » — pas une propriété du
+ * craft. La retenir d'une session à l'autre n'apporterait rien et ferait un
+ * champ de plus à migrer.
+ */
+const objectifsParLigne = new Map();
+
 function dessinerUneCarteDeCraft(noeud, bilan, analyse) {
   const craft = noeud.craft;
+  const bilanDXP = chiffrerLXPDUnCraft(craft, objectifsParLigne.get(craft.identifiantDeLigne));
+  const objectifChoisi = objectifsParLigne.get(craft.identifiantDeLigne);
 
   const carte = document.createElement("div");
   carte.className = "carte-craft" + (bilan.estUnSousCraft ? " carte-sous-craft" : "");
@@ -146,11 +229,10 @@ function dessinerUneCarteDeCraft(noeud, bilan, analyse) {
     + '<div class="grille-champs-craft">'
       + construireLeChampDeQuantite(craft, bilan)
       + (bilan.estUnSousCraft ? "" : construireLeSelecteurDeDestination(craft))
-      + '<div class="champ-etiquete"><label class="etiquette">XP par craft à ton niveau</label>'
-        + '<input data-champ="experienceParCraft" value="'
-        + (craft.experienceParCraft ? craft.experienceParCraft : "") + '" placeholder="ex. 1618"></div>'
+      + construireLeCalibrageDXP(craft, bilanDXP)
       + (bilan.estUnSousCraft ? "" : construireLesChampsDeVente(craft))
     + "</div>"
+    + construireLaLigneDXP(craft, bilanDXP, objectifChoisi)
     + construireLaListeDesIngredients(craft, noeud, analyse.lignesDeRessources)
     + construireLaLigneDeBilan(craft, bilan);
 
@@ -229,6 +311,31 @@ function brancherLesActionsDUneCarte(carte, craft, noeud) {
     });
   }
 
+  const champDeLXP = carte.querySelector("[data-xp-observee]");
+  const champDuNiveau = carte.querySelector("[data-niveau-observation]");
+
+  // Les deux champs de calibrage vont ensemble : une XP sans son niveau ne se
+  // projette nulle part. On enregistre donc la paire, quel que soit celui des
+  // deux qui vient d'être modifié.
+  const enregistrerLeCalibrage = () => {
+    const xp = interpreterSaisieDeMontant(champDeLXP.value);
+    const niveau = interpreterSaisieDeMontant(champDuNiveau.value);
+    enregistrerLObservationDXP(craft.identifiantAnkama, xp, niveau || null);
+    sauvegarderEtat();
+    redessinerToutLEcran();
+  };
+  if (champDeLXP) champDeLXP.addEventListener("change", enregistrerLeCalibrage);
+  if (champDuNiveau) champDuNiveau.addEventListener("change", enregistrerLeCalibrage);
+
+  const selecteurDObjectif = carte.querySelector("[data-objectif-xp]");
+  if (selecteurDObjectif) {
+    selecteurDObjectif.addEventListener("change", () => {
+      const valeur = selecteurDObjectif.value;
+      objectifsParLigne.set(craft.identifiantDeLigne, valeur === "" ? null : parseInt(valeur, 10));
+      redessinerToutLEcran();
+    });
+  }
+
   for (const champ of carte.querySelectorAll("[data-champ]")) {
     champ.addEventListener("change", () => {
       const nomDuChamp = champ.getAttribute("data-champ");
@@ -249,14 +356,48 @@ function brancherLesActionsDUneCarte(carte, craft, noeud) {
    Tableau des ressources
    ============================================================ */
 
+/**
+ * Les ressources, en DEUX tableaux qui ne répondent pas à la même question.
+ *
+ *   « à acheter »       la liste de courses, celle qu'on suit au HDV. Une
+ *                       ressource produite par un atelier de la session n'y a
+ *                       rien à faire : elle ferait acheter ce qu'on fabrique.
+ *   « craftées sur place » ce que les ateliers produisent. Les champs de prix y
+ *                       restent saisissables, et c'est tout l'intérêt de ne pas
+ *                       les avoir simplement fait disparaître : ce prix-là est
+ *                       celui auquel l'objet se vend, donc la moitié de
+ *                       l'arbitrage « le crafter ou l'acheter ».
+ *
+ * Les mêmes fabriques de cellules servent aux deux, donc une saisie faite d'un
+ * côté se publie et se propage exactement comme de l'autre.
+ */
 function dessinerLeTableauDesRessources(analyse) {
+  const aAcheter = analyse.lignesDeRessources.filter(l => !l.entierementProduiteSurPlace);
+  const crafteesSurPlace = analyse.lignesDeRessources.filter(l => l.entierementProduiteSurPlace);
+
+  // Les champs qui vont disparaître sont marqués avant d'être retirés : leur
+  // `change` de sortie n'est pas une saisie de Brice et ne doit rien publier.
+  marquerLesChampsCommeObsoletes(conteneurRessources);
+  marquerLesChampsCommeObsoletes(conteneurRessourcesCraftees);
+
   if (analyse.lignesDeRessources.length === 0) {
-    marquerLesChampsCommeObsoletes(conteneurRessources);
     conteneurRessources.innerHTML =
       '<div class="texte-vide">Les ressources apparaîtront ici dès qu\'un craft sera ajouté.</div>';
-    return;
+  } else if (aAcheter.length === 0) {
+    conteneurRessources.innerHTML =
+      '<div class="texte-vide">Rien à acheter : tout est crafté sur place.</div>';
+  } else {
+    conteneurRessources.innerHTML = "";
+    conteneurRessources.appendChild(construireLeTableauDAchat(aAcheter, analyse));
   }
 
+  dessinerLesRessourcesCraftees(crafteesSurPlace, analyse);
+
+  brancherLaCopieDesNoms(conteneurRessources);
+  brancherLaCopieDesNoms(conteneurRessourcesCraftees);
+}
+
+function construireLeTableauDAchat(lignes, analyse) {
   const tableau = document.createElement("table");
   tableau.className = "tableau-ressources";
   tableau.innerHTML =
@@ -270,12 +411,12 @@ function dessinerLeTableauDesRessources(analyse) {
 
   const corpsDuTableau = tableau.querySelector("tbody");
 
-  for (const ligne of analyse.lignesDeRessources) {
+  for (const ligne of lignes) {
     const rangee = document.createElement("tr");
     rangee.innerHTML =
       construireLaCelluleDuNom(ligne)
       + '<td class="colonne-chiffre">'
-        + formaterNombreSimple(ligne.besoin.quantiteTotaleNecessaire) + "</td>"
+        + formaterNombreSimple(ligne.besoin.quantiteAAcheter) + "</td>"
       + construireLaCelluleDuPrixUnitaire(ligne)
       + construireLesCellulesDesGrosLots(ligne)
       + construireLaCelluleDuPrixMoyen(ligne)
@@ -288,12 +429,83 @@ function dessinerLeTableauDesRessources(analyse) {
     corpsDuTableau.appendChild(rangee);
   }
 
-  // Les champs qui vont disparaître sont marqués avant d'être retirés : leur
-  // `change` de sortie n'est pas une saisie de Brice et ne doit rien publier.
-  marquerLesChampsCommeObsoletes(conteneurRessources);
-  conteneurRessources.innerHTML = "";
-  conteneurRessources.appendChild(tableau);
-  brancherLaCopieDesNoms(conteneurRessources);
+  return tableau;
+}
+
+/**
+ * Le second tableau : ce que les ateliers de la session produisent.
+ *
+ * Pas de colonne « à acheter » ni de coût d'achat, qui n'auraient pas de sens
+ * ici. À leur place, les deux chiffres de l'arbitrage : ce que fabriquer une
+ * unité coûte, et l'écart avec ce qu'elle vaut au HDV.
+ *
+ * Le bloc entier disparaît quand rien n'est crafté sur place. Un tableau vide
+ * annoncé par un titre ferait croire à une section en panne.
+ */
+function dessinerLesRessourcesCraftees(lignes, analyse) {
+  const section = conteneurRessourcesCraftees.closest(".section-ressources-craftees");
+  if (section) section.hidden = lignes.length === 0;
+  if (lignes.length === 0) {
+    conteneurRessourcesCraftees.innerHTML = "";
+    return;
+  }
+
+  const tableau = document.createElement("table");
+  tableau.className = "tableau-ressources";
+  tableau.innerHTML =
+    "<thead><tr>"
+    + '<th>Objet</th><th class="colonne-chiffre">Produit</th>'
+    + '<th class="colonne-partagee">×1 <span class="exposant">partagé</span></th>'
+    + "<th>×10</th><th>×100</th><th>×1000</th>"
+    + "<th>Prix moyen</th>"
+    + '<th class="colonne-chiffre">Coût de fabrication</th>'
+    + "<th>Crafter ou acheter</th>"
+    + "</tr></thead><tbody></tbody>";
+
+  const corps = tableau.querySelector("tbody");
+
+  for (const ligne of lignes) {
+    const rangee = document.createElement("tr");
+    rangee.innerHTML =
+      construireLaCelluleDuNom(ligne)
+      + '<td class="colonne-chiffre">'
+        + formaterNombreSimple(ligne.besoin.quantiteTotaleNecessaire) + "</td>"
+      + construireLaCelluleDuPrixUnitaire(ligne)
+      + construireLesCellulesDesGrosLots(ligne)
+      + construireLaCelluleDuPrixMoyen(ligne)
+      + '<td class="colonne-chiffre">'
+        + (ligne.coutDeFabricationUnitaire > 0
+            ? formaterMontantEnKamas(ligne.coutDeFabricationUnitaire)
+            : '<span class="attenue">–</span>') + "</td>"
+      + "<td>" + decrireLArbitrageDUneLigne(ligne) + "</td>";
+
+    brancherLesSaisiesDePrixDUneRangee(rangee, ligne);
+    corps.appendChild(rangee);
+  }
+
+  conteneurRessourcesCraftees.innerHTML = "";
+  conteneurRessourcesCraftees.appendChild(tableau);
+}
+
+/**
+ * L'écart entre fabriquer et acheter, sur une ligne du tableau des craftées.
+ *
+ * Muet tant qu'il manque une des deux moitiés : annoncer une économie sans
+ * savoir à quoi on la compare serait pire que de se taire.
+ */
+function decrireLArbitrageDUneLigne(ligne) {
+  const fabrication = ligne.coutDeFabricationUnitaire || 0;
+  const marche = ligne.prixUnitaireRetenu || 0;
+  if (fabrication <= 0 || marche <= 0) {
+    return '<span class="attenue petit">saisis le ×1 pour comparer</span>';
+  }
+
+  const ecart = marche - fabrication;
+  const avantageAuCraft = ecart > 0;
+  return '<span class="mention-composition" title="Coût de fabrication comparé au prix relevé au HDV">'
+    + (avantageAuCraft ? "crafter gagne " : "acheter gagne ")
+    + '<strong class="' + (avantageAuCraft ? "gain" : "perte") + '">'
+    + formaterMontantEnKamas(Math.abs(ecart)) + "</strong>/u</span>";
 }
 
 /**

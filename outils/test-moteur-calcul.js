@@ -23,6 +23,10 @@ import { analyserLaSessionComplete, listerLesIdentifiantsDesRessourcesDeLaSessio
   from "../calculateur/js/analyse.js";
 import { construireLArbreDesCrafts, listerLesObjetsDeLaBranche }
   from "../calculateur/js/arbre-de-crafts.js";
+import { deduireLExperienceDeBase, calculerLeFacteurDeRegression,
+         calculerLExperienceDUnCraft, deduireLeNiveauDepuisLExperience,
+         lireLeSeuilDUnNiveau, calculerLesCraftsPourAtteindreUnNiveau }
+  from "../calculateur/js/xp-metier.js";
 import { VERSION_COURANTE_DU_SCHEMA } from "../calculateur/js/config.js";
 
 let nombreDEchecs = 0;
@@ -456,6 +460,106 @@ verifier("un craft dont le parent a disparu remonte à la racine",
   arbreOrphelin.racines.length, 1);
 verifier("et sa quantité saisie est reprise",
   arbreOrphelin.racines[0].quantiteEffective, 2);
+
+
+console.log("\n--- Expérience de métier : la formule ---");
+
+/*
+ * Les trois relevés de Brice, au métier 89. C'est ce qui départage les deux
+ * formules qui circulent sur le forum officiel : celle retenue en déduit une
+ * progression régulière de l'XP de base d'environ 10 % par niveau de recette,
+ * l'autre une progression de 1,5 % puis de 11 %, qui ne ressemble à rien.
+ */
+const RELEVES_DE_BRICE = [
+  { metier: 89, recette: 90, xp: 1800 },
+  { metier: 89, recette: 89, xp: 1618 },
+  { metier: 89, recette: 88, xp: 1449 }
+];
+
+const basesDeduites = RELEVES_DE_BRICE.map(r =>
+  deduireLExperienceDeBase(r.xp, r.metier, r.recette));
+
+// 1 782, 1 618, 1 464 : chaque cran de recette vaut environ 10 % de plus.
+const progressions = [basesDeduites[0] / basesDeduites[1], basesDeduites[1] / basesDeduites[2]];
+verifier("l'XP de base progresse régulièrement d'un niveau de recette à l'autre",
+  progressions.every(p => p > 1.09 && p < 1.12), true);
+
+verifier("sans écart, le facteur vaut 1", calculerLeFacteurDeRegression(50, 50), 1);
+verifier("dix niveaux au-dessus de la recette, on perd 10 %",
+  calculerLeFacteurDeRegression(60, 50), 0.9);
+verifier("sous le niveau de la recette, le facteur dépasse 1",
+  calculerLeFacteurDeRegression(49, 50), 1.01);
+// La borne qui empêche une XP négative : au-delà de cent niveaux d'écart, une
+// recette ne rapporte plus rien, elle ne retire pas de l'expérience.
+verifier("cent niveaux d'écart annulent l'XP", calculerLeFacteurDeRegression(150, 50), 0);
+verifier("et au-delà, elle reste nulle", calculerLeFacteurDeRegression(180, 50), 0);
+
+verifier("l'XP d'un craft est tronquée",
+  calculerLExperienceDUnCraft(1000, 55, 50), 950);
+verifier("une observation se retrouve à l'identique",
+  calculerLExperienceDUnCraft(deduireLExperienceDeBase(1449, 89, 88), 89, 88), 1449);
+verifier("une XP de base indéductible vaut 0",
+  deduireLExperienceDeBase(500, 200, 50), 0);
+
+console.log("\n--- Niveaux et seuils ---");
+
+// Table courte et lisible à la main : niveau 1 à 0, puis 100, 300, 600, 1000.
+const TABLE_COURTE = [0, 100, 300, 600, 1000];
+
+verifier("sans XP, on est niveau 1", deduireLeNiveauDepuisLExperience(0, TABLE_COURTE), 1);
+verifier("99 XP, toujours niveau 1", deduireLeNiveauDepuisLExperience(99, TABLE_COURTE), 1);
+verifier("100 XP pile, niveau 2", deduireLeNiveauDepuisLExperience(100, TABLE_COURTE), 2);
+verifier("650 XP, niveau 4", deduireLeNiveauDepuisLExperience(650, TABLE_COURTE), 4);
+verifier("au-delà du dernier seuil, niveau maximal",
+  deduireLeNiveauDepuisLExperience(99999, TABLE_COURTE), 5);
+verifier("le seuil du niveau 1 est nul", lireLeSeuilDUnNiveau(1, TABLE_COURTE), 0);
+verifier("le seuil du niveau 3", lireLeSeuilDUnNiveau(3, TABLE_COURTE), 300);
+
+console.log("\n--- Combien de crafts pour monter ---");
+
+/*
+ * Recette de niveau 1, XP de base 100, métier au niveau 1 sans XP.
+ *   niveau 1 vers 2 : facteur 1,00 -> 100 XP par craft, il en faut 100 -> 1 craft
+ *   niveau 2 vers 3 : facteur 0,99 ->  99 XP par craft, il manque 200 -> 3 crafts
+ *                     (le surplus du palier précédent est reporté)
+ */
+let montee = calculerLesCraftsPourAtteindreUnNiveau({
+  niveauActuel: 1, experienceActuelle: 0, niveauVise: 3,
+  xpDeBase: 100, niveauDeLaRecette: 1, xpCumuleeParNiveau: TABLE_COURTE
+});
+verifier("la montée est atteignable", montee.atteignable, true);
+verifier("l'XP par craft baisse d'un palier à l'autre",
+  montee.paliers.map(p => p.xpParCraft), [100, 99]);
+verifier("nombre de crafts par palier", montee.paliers.map(p => p.nombreDeCrafts), [1, 3]);
+verifier("total des crafts", montee.nombreDeCrafts, 4);
+
+// Le report du surplus n'est pas un détail : sans lui, le second palier
+// demanderait 3 crafts à partir de 100 XP au lieu de partir de 100 XP acquis.
+verifier("le surplus du palier précédent est reporté",
+  montee.paliers[1].xpManquante, 200);
+
+verifier("un niveau déjà atteint ne demande aucun craft",
+  calculerLesCraftsPourAtteindreUnNiveau({
+    niveauActuel: 3, experienceActuelle: 300, niveauVise: 3,
+    xpDeBase: 100, niveauDeLaRecette: 1, xpCumuleeParNiveau: TABLE_COURTE
+  }).nombreDeCrafts, 0);
+
+// Une recette trop basse pour le métier ne mène nulle part, et le dire vaut
+// mieux que de renvoyer un nombre de crafts astronomique.
+const monteeImpossible = calculerLesCraftsPourAtteindreUnNiveau({
+  niveauActuel: 3, experienceActuelle: 300, niveauVise: 5,
+  xpDeBase: 100, niveauDeLaRecette: -120, xpCumuleeParNiveau: TABLE_COURTE
+});
+verifier("une recette qui ne rapporte plus rien bloque la montée",
+  monteeImpossible.atteignable, false);
+verifier("et le niveau de blocage est annoncé", monteeImpossible.niveauDeBlocage, 3);
+
+// Partir en cours de palier : l'XP déjà acquise compte.
+verifier("l'XP déjà acquise dans le palier est comptée",
+  calculerLesCraftsPourAtteindreUnNiveau({
+    niveauActuel: 1, experienceActuelle: 60, niveauVise: 2,
+    xpDeBase: 40, niveauDeLaRecette: 1, xpCumuleeParNiveau: TABLE_COURTE
+  }).nombreDeCrafts, 1);
 
 console.log("\n" + (nombreDEchecs === 0
   ? "Tous les tests passent."

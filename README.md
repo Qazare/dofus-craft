@@ -146,6 +146,21 @@ l'XP, le calculateur chiffre l'opération. Ce qu'il fait et que duffus ne fait p
   invisible des totaux et inatteignable par la publication, sans qu'aucun
   drapeau n'ait à être testé nulle part. Une coche est son seul passage vers la
   base : un clic, il devient violet et part vers dofus-calculator si c'est un ×1.
+- **Deux listes de ressources, pas une.** « À acheter » est la liste de courses,
+  celle qu'on suit au HDV ; ce qu'un atelier de la session produit n'y a rien à
+  faire, il ferait acheter ce qu'on fabrique. Ces objets passent dans « craftées
+  sur place », où les champs de prix restent saisissables — ce prix-là est celui
+  auquel l'objet se vend, donc la moitié de l'arbitrage *le crafter ou l'acheter*,
+  l'autre moitié étant son coût de fabrication, affiché à côté.
+- **XP de métier, objectifs et régression.** Tu saisis l'XP cumulée du métier,
+  le niveau s'en déduit. Sur chaque recette, un relevé unique — l'XP vue *et le
+  niveau où tu l'as vue* — suffit à calibrer sa courbe pour toujours. Choisis
+  alors un objectif, `+1 niveau` ou un palier rond, et le compte de crafts se
+  fait **palier par palier**, en recalculant l'XP à chaque niveau gagné. Ce n'est
+  pas un raffinement : diviser l'XP restante par l'XP d'un craft donne toujours
+  une réponse trop optimiste, puisque la recette rapporte moins à chaque niveau.
+  La ligne annonce aussi le niveau où la recette s'éteint, celui où il faudra en
+  changer.
 - **Taxe HDV de 2 %**, modifiable.
 - **Mémoire locale.** Prix, XP par recette et cache des noms d'objets restent
   dans le navigateur, avec export et import JSON. Aucun compte, aucun serveur.
@@ -156,6 +171,9 @@ l'XP, le calculateur chiffre l'opération. Ce qu'il fait et que duffus ne fait p
 |---|---|---|
 | **DofusDude** `api.dofusdu.de` | Recettes, noms, icônes | aucune |
 | **dofus-calculator.fr** `/api` | Prix HDV relevés par les joueurs, lecture et écriture | aucune en lecture, jeton en écriture |
+
+Et deux fichiers du dépôt, sous `calculateur/donnees/`, pour ce qu'aucune API ne
+donne : `metiers-par-recette.json` et `xp-par-niveau-de-metier.json`.
 DofusDB reste écarté, y compris pour le métier : sa licence LPNC-IA interdit les
 projets majoritairement produits par une IA.
 
@@ -247,6 +265,8 @@ c'est ce qui permet aux tests d'importer le moteur sans traîner le DOM derrièr
 | `moteur.js` | Programmation dynamique de l'achat. Pur, sans état ni DOM. |
 | `prix-communautaires.js` | Lecture du cache et préséance des prix. Pur. |
 | `arbre-de-crafts.js` | Structure de la chaîne, quantités déduites, ordre de calcul. Pur. |
+| `xp-metier.js` | Formule d'XP, régression, montée palier par palier. Pur. |
+| `xp-session.js` | Ce que l'XP devient une fois branchée sur l'état de la session. |
 | `analyse.js` | Agrégation de la session et quote-part par objet. |
 | `api-dofusdude.js`, `api-prix.js`, `metiers.js` | Les trois accès réseau, et eux seuls. |
 | `journal.js` | Bandeau d'état. Rien ne part au réseau en silence. |
@@ -276,14 +296,32 @@ donc servir le dossier, d'où `outils/servir.js`.
 1 bis. ~~**Dépendance à dofusdb pour le métier.**~~ Réglé le 20 08 2026 : la
    donnée vient de Datafus, en MIT, figée dans un fichier du dépôt. Aucun appel
    à un tiers, et la question de licence ne se pose plus.
-2. **Formule d'XP de craft.** Non résolue, et volontairement pas devinée. L'API
-   DofusDude ne l'expose pas, le forum officiel refuse la lecture automatisée, et
-   les chiffres relevés (niveau 89 : recette 90 → 1800 XP, 89 → 1618, 88 → 1449)
-   ne suivent ni une progression linéaire ni une progression géométrique propre.
-   En attendant, l'XP se saisit une fois par recette et reste mémorisée, à
-   corriger après chaque montée de niveau. Pour trancher : relever les XP
-   affichées par duffus sur trois ou quatre recettes, à deux niveaux de métier
-   différents, et ajuster la courbe sur ces données.
+2. ~~**Formule d'XP de craft.**~~ Réglée le 20 08 2026, et par les relevés
+   eux-mêmes. La formule est `xpDeBase × (1 − (niveauDeMétier − niveauDeRecette)
+   / 100)`. Des deux formules qui circulent sur le forum officiel, toutes deux
+   données de mémoire par des joueurs, c'est la seule qui tienne devant les
+   trois relevés du niveau 89 : elle en déduit des XP de base de 1 782, 1 618 et
+   1 464, soit une progression régulière d'environ 10 % par niveau de recette.
+   L'autre, en `1 / (1 + 0,1 × écart^1,1)`, en déduit 1 800, 1 618 et 1 594 —
+   1,5 % puis 11 %, ce qui ne ressemble à aucune courbe.
+
+   L'XP de base d'une recette, elle, n'est publiée nulle part et n'a pas été
+   devinée : elle se **calibre** sur un relevé unique, l'XP vue et le niveau où
+   elle l'a été. Extrapoler une exponentielle sur deux cents niveaux depuis trois
+   points voisins aurait donné un facteur 7 d'erreur pour 1 % de dérive par niveau.
+
+2 bis. **La table d'XP par niveau de métier est dérivée, pas relevée.** Le
+   client de Dofus reçoit ses seuils du serveur (`KnownJobWrapper.jobXpLevelFloor`),
+   aucune API ne les publie, et ni Datafus ni `LuaFormulas` ne les portent. La
+   table livrée part de la table officielle 1-100 — culminant à 581 687 XP,
+   relevée à l'identique par wiki-dofus.eu et guidedofus.com — redécoupée en 200
+   niveaux d'après le devblog d'Ankama : « un niveau 100 de métier en 2.28
+   équivaudra à un niveau 200 de métier en 2.29, les métiers ne nécessiteront pas
+   plus d'expérience pour atteindre leur niveau maximum. » Les seuils
+   intermédiaires sont interpolés et signalés `approx.` à l'écran. Geneka, seul
+   calculateur Dofus 3 trouvé, annonce 7 700 000 au niveau 200, ce qui contredit
+   Ankama et dont la forme sent la courbe ajustée. **À confirmer sur pièce :** un
+   seul relevé en jeu, niveau et XP affichée, valide l'échelle ou la renverse.
 3. **Emplacement final** du dépôt git, hors de toute synchro de fichiers, et
    choix de l'hébergeur. Comparaison dans `calculateur/DEPLOIEMENT.md`.
    Cloudflare Pages avec Access est le seul moyen gratuit d'avoir une URL qui ne
@@ -340,6 +378,7 @@ d'Alt+Tab.
 | 15 08 2026 | Mode craft en moitié droite pleine hauteur, le client Unity se redimensionne correctement. |
 | 15 08 2026 | Aucun organizer Dofus installé, la bascule de personnage sera ajoutée au script existant. |
 | 15 08 2026 | DofusDB écarté pour cause de licence LPNC-IA, DofusDude retenu. |
+| 20 08 2026 | XP de métier : formule de régression établie sur les relevés, XP de base calibrée par un relevé unique plutôt que devinée, objectifs de niveau comptés palier par palier. Table d'XP dérivée de la table officielle 1-100 et du devblog de la refonte, ses interpolations signalées. Les ressources craftées sur place quittent la liste de courses pour une liste à part, prix toujours saisissables. |
 | 20 08 2026 | Chaîne de sous-crafts, avec quantités déduites et coût qui remonte la branche. Métier et niveau requis extraits de Datafus, en MIT, dans un fichier versionné plutôt que par un appel — aucune API ne porte cette donnée, DofusDB reste écarté. Largeur bornée à `150ch`, et copie d'un nom au clic. |
 | 15 08 2026 | Taxe HDV fixée à 2 % du prix de vente. |
 | 15 08 2026 | Le calculateur est un fichier local et non un artefact, pour garder le stockage navigateur. |

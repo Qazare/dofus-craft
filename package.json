@@ -8,6 +8,7 @@
     "test:api": "node outils/verifier-les-api.js",
     "test:interface": "node outils/verifier-interface.js",
     "metiers": "node outils/extraire-les-metiers.js",
+    "table-xp": "node outils/extraire-la-table-dxp.js",
     "servir": "node outils/servir.js"
   },
   "devDependencies": {

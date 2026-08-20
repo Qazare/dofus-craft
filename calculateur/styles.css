@@ -479,3 +479,47 @@ input::placeholder { color: #4c574f; }
 .nom-copiable.copie::after { content: " copié"; font-size: 10px; }
 .nom-copiable.copie-en-echec { color: var(--perte); text-decoration-color: var(--perte); }
 .nom-copiable.copie-en-echec::after { content: " copie refusée"; font-size: 10px; }
+
+/* Chapeau d'une section, quand le titre seul ne dit pas à quoi elle sert. */
+.note-de-section {
+  font-size: 11px; color: var(--texte-attenue); margin: -4px 0 10px; max-width: 80ch;
+}
+
+/* ============================================================
+   EXPÉRIENCE DE MÉTIER
+
+   Deux endroits, deux rôles. La section « Tes métiers » porte l'état — où en
+   est chaque métier — et la ligne d'XP d'une carte porte la projection : ce que
+   CETTE recette rapporte, et jusqu'où elle mène.
+   ============================================================ */
+
+.grille-metiers {
+  display: grid; gap: 9px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.carte-metier {
+  background: var(--fond-carte); border: 1px solid var(--bordure);
+  border-radius: 11px; padding: 10px 12px;
+}
+.entete-metier { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.niveau-metier { font-size: 11px; color: var(--accent); }
+.progression-metier { font-size: 11px; margin-top: 6px; }
+
+/* Un seuil interpolé plutôt que relevé. Signalé, pas caché : l'utilisateur
+   décide ce qu'il fait d'une approximation, à condition de la connaître. */
+.pastille-approximatif { color: var(--alerte); border-style: dashed; }
+
+/* La ligne d'XP d'une carte de craft. Même gabarit que la ligne de bilan, dont
+   elle est le pendant : l'une chiffre les kamas, l'autre l'expérience. */
+.ligne-xp {
+  margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--bordure);
+  font-size: 12px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.accentue { color: var(--accent); }
+.selecteur-objectif {
+  font: inherit; font-size: 11px; color: var(--texte); background: var(--fond-champ);
+  border: 1px solid var(--bordure); border-radius: 7px; padding: 4px 7px;
+  cursor: pointer; margin-left: auto;
+}
+.selecteur-objectif:focus { outline: none; border-color: var(--accent); }

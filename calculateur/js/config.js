@@ -46,6 +46,27 @@ export const NOMBRE_DE_SUGGESTIONS_PAR_FAMILLE = 6;
 export const ADRESSE_DES_METIERS_PAR_RECETTE = "donnees/metiers-par-recette.json";
 
 /**
+ * Table d'XP par niveau de métier, fabriquée par `outils/extraire-la-table-dxp.js`.
+ *
+ * Dérivée et non relevée : le client de Dofus reçoit ses seuils du serveur, et
+ * aucune API ne les expose. Les niveaux PAIRS viennent de la table officielle
+ * 1-100, recoupée par deux sources ; les IMPAIRS sont interpolés, le devblog
+ * d'Ankama disant seulement que 200 niveaux ont remplacé 100 sans coûter plus
+ * d'expérience. Le fichier porte le drapeau de ce qui est interpolé, et
+ * l'interface le dit là où ça compte.
+ */
+export const ADRESSE_DE_LA_TABLE_DXP = "donnees/xp-par-niveau-de-metier.json";
+
+/**
+ * Objectifs proposés sur une carte de craft.
+ *
+ * `null` vaut « le prochain niveau », qui n'est pas un nombre fixe puisqu'il
+ * dépend du niveau courant. Les autres sont les paliers ronds où l'on décide
+ * habituellement de changer de recette.
+ */
+export const OBJECTIFS_DE_NIVEAU_PROPOSES = [null, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200];
+
+/**
  * Métiers de Dofus, indexés par le `jobId` des fichiers du jeu. Recopiés plutôt
  * que dérivés : la liste tient en vingt lignes, ne bouge qu'à une extension, et
  * l'avoir ici évite de faire porter au fichier de données un nom répété quatre
@@ -158,7 +179,7 @@ export const CLE_STOCKAGE_DE_LA_SESSION = "calculateur-craft-dofus-v1";
  */
 export const CLE_STOCKAGE_DU_JETON = "calculateur-craft-dofus-jeton";
 
-export const VERSION_COURANTE_DU_SCHEMA = 6;
+export const VERSION_COURANTE_DU_SCHEMA = 7;
 
 /* ---- Format d'échange de l'OCR ----
 

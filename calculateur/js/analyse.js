@@ -133,14 +133,27 @@ export function analyserLaSessionComplete() {
 
   const bilansParLigne = new Map();
 
+  // Coût de fabrication unitaire des objets produits sur place, renseigné au
+  // fil du chiffrage et reporté ensuite sur la ligne de ressource. C'est la
+  // moitié manquante de l'arbitrage « le crafter ou l'acheter » : sans lui, la
+  // liste des craftées n'aurait qu'un prix de HDV à montrer.
+  const coutDeFabricationParObjet = {};
+
   // À l'envers du parcours en largeur : les enfants d'abord, puisqu'un parent
   // additionne leur coût au sien.
   for (let rang = arbre.deLaRacineAuxFeuilles.length - 1; rang >= 0; rang--) {
     const noeud = arbre.deLaRacineAuxFeuilles[rang];
-    bilansParLigne.set(noeud.craft.identifiantDeLigne,
-      chiffrerUnCraft(noeud, bilansParLigne, tauxDeTaxe, {
-        coutUnitaireEffectifParRessource, prixUnitaireDeMarcheParRessource
-      }));
+    const bilan = chiffrerUnCraft(noeud, bilansParLigne, tauxDeTaxe, {
+      coutUnitaireEffectifParRessource, prixUnitaireDeMarcheParRessource
+    });
+    bilansParLigne.set(noeud.craft.identifiantDeLigne, bilan);
+
+    // Seuls les sous-crafts alimentent ce relevé : un craft de tête n'est
+    // l'ingrédient de personne, son coût n'a pas à s'afficher dans une liste
+    // de ressources.
+    if (bilan.estUnSousCraft && bilan.coutParObjet > 0) {
+      coutDeFabricationParObjet[noeud.craft.identifiantAnkama] = bilan.coutParObjet;
+    }
   }
 
   // --- Étape 4 : totaux de session, sur les seuls crafts de tête ---
@@ -171,6 +184,13 @@ export function analyserLaSessionComplete() {
       taxeTotale += bilan.taxe;
       coutAttribueTotal += bilan.coutDesRessources;
     }
+  }
+
+  // Le report se fait ici et non pendant le chiffrage : les lignes de
+  // ressources sont construites avant lui, puisque c'est leur prix qui le nourrit.
+  for (const ligne of lignesDeRessources) {
+    ligne.coutDeFabricationUnitaire =
+      coutDeFabricationParObjet[ligne.besoin.identifiantAnkama] || 0;
   }
 
   return {

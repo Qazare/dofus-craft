@@ -32,6 +32,16 @@
 
 <div class="bandeau-resultats" id="bandeauResultats"></div>
 
+<!-- Masquée tant qu'aucun métier n'est en jeu : la section n'a de sens qu'une
+     fois une recette ajoutée, son métier étant ce qui la fait apparaître. -->
+<section class="section-metiers" hidden>
+  <h2>Tes métiers</h2>
+  <p class="note-de-section">Saisis l'XP cumulée que le jeu affiche : le niveau s'en déduit.
+  C'est l'XP qui fait foi, pas le niveau — un niveau seul ne dit pas où tu en es dans le palier,
+  et c'est ce reste qui décide du nombre de crafts.</p>
+  <div id="conteneurMetiers" class="grille-metiers"></div>
+</section>
+
 <h2>Crafts de la session</h2>
 <div class="zone-recherche">
   <input id="champRechercheRecette" autocomplete="off"
@@ -44,6 +54,18 @@
 <div class="zone-tableau">
   <div id="conteneurRessources"></div>
 </div>
+
+<!-- Masquée tant qu'aucun atelier ne produit quoi que ce soit : un tableau vide
+     sous un titre se lit comme une section en panne. -->
+<section class="section-ressources-craftees" hidden>
+  <h2>Craftées sur place</h2>
+  <p class="note-de-section">Produites par les ateliers de la session, donc hors de la liste
+  de courses. Les prix restent saisissables : c'est ce à quoi l'objet se vend, et donc la
+  moitié de l'arbitrage entre le crafter et l'acheter.</p>
+  <div class="zone-tableau">
+    <div id="conteneurRessourcesCraftees"></div>
+  </div>
+</section>
 
 <div class="legende">
   <span class="echantillon echantillon-a-moi"></span> ton relevé, publié vers la base
@@ -115,8 +137,26 @@
   et publiables comme ici.</p>
 
   <p>Le coût de chaque objet est une quote-part du coût groupé des ressources, au prorata des
-  quantités, puisque acheter en lot pour plusieurs recettes coûte moins cher que recette par recette.
-  L'XP par craft dépend de ton niveau de métier : mémorisée par recette, à corriger après une montée.</p>
+  quantités, puisque acheter en lot pour plusieurs recettes coûte moins cher que recette par recette.</p>
+
+  <p><strong>L'XP de métier, et pourquoi un seul relevé suffit.</strong> Une recette rapporte
+  <em>xpDeBase × (1 − (niveauDeMétier − niveauDeRecette) / 100)</em> : un point de pourcentage
+  perdu par niveau d'écart, jusqu'à ne plus rien rapporter cent niveaux au-dessus de la recette.
+  Personne ne publie l'XP de base d'une recette, alors on la <em>déduit</em> : tu relèves une fois
+  l'XP qu'un craft t'a donnée <em>en disant à quel niveau tu l'as vue</em>, et la formule remonte à
+  la base. Tout le reste s'en déduit, à n'importe quel niveau. Choisis ensuite un objectif —
+  <em>+1 niveau</em>, <em>niveau 60</em>, <em>niveau 140</em> — et le compte de crafts se fait
+  palier par palier, en recalculant l'XP à chaque niveau gagné : diviser l'XP restante par l'XP
+  d'un craft donnerait toujours une réponse trop optimiste. L'info-bulle montre le détail, et la
+  ligne annonce le niveau où la recette s'éteint, celui où il faudra en changer.</p>
+
+  <p><strong>Ton XP se saisit en cumulé, pas en niveau.</strong> Un niveau ne dit pas où tu en es
+  dans le palier, et c'est justement ce reste qui décide du nombre de crafts. Le niveau s'affiche
+  à côté, déduit — ce qui en fait aussi ta vérification : s'il ne correspond pas à ton jeu, c'est
+  la table d'XP qui est à corriger. Elle est <em>dérivée</em> et non relevée : le client de Dofus
+  reçoit ses seuils du serveur et aucune API ne les publie. Elle vient de la table officielle
+  1-100, recoupée par deux sources, redécoupée en 200 niveaux d'après le devblog d'Ankama sur la
+  refonte des métiers. Les seuils interpolés portent la mention <em>approx.</em></p>
 
   <p class="attenue">Recettes : <a href="https://api.dofusdu.de" target="_blank" rel="noopener">DofusDude</a>.
   Métiers : <a href="https://github.com/bot4dofus/Datafus" target="_blank" rel="noopener">Datafus</a>, en MIT.

@@ -21,7 +21,9 @@ installerLeJournal(element("journal"));
 installerLaVue({
   bandeauResultats: element("bandeauResultats"),
   conteneurCrafts: element("conteneurCrafts"),
-  conteneurRessources: element("conteneurRessources")
+  conteneurRessources: element("conteneurRessources"),
+  conteneurRessourcesCraftees: element("conteneurRessourcesCraftees"),
+  conteneurMetiers: element("conteneurMetiers")
 });
 
 installerLaRecherche({

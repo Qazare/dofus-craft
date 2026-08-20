@@ -5,6 +5,7 @@
 import { etatApplication, sauvegarderEtat, normaliserUnCraft } from "./etat.js";
 import { obtenirLesInformationsDUnObjet, obtenirLObjetCompletAvecSaRecette } from "./api-dofusdude.js";
 import { chargerLesMetiers } from "./metiers.js";
+import { chargerLaTableDXP } from "./xp-session.js";
 import { construireLArbreDesCrafts, listerLesObjetsDeLaBranche } from "./arbre-de-crafts.js";
 import { lireLesPrixCommunautaires } from "./api-prix.js";
 import { listerLesIdentifiantsDesRessourcesDeLaSession } from "./analyse.js";
@@ -192,7 +193,13 @@ export function retirerUnCraftEtSaDescendance(identifiantDeLigne) {
  * quand elle échoue. Voir l'en-tête de `metiers.js` sur ce dernier point.
  */
 export async function synchroniserLesRecettesDeLaSession() {
-  if (await chargerLesMetiers()) redessinerToutLEcran();
+  // Les deux tables partent ensemble : elles sont servies par le même hébergeur,
+  // et attendre la première pour demander la seconde doublerait l'attente sans
+  // rien simplifier.
+  const [metiersCharges, tableChargee] = await Promise.all([
+    chargerLesMetiers(), chargerLaTableDXP()
+  ]);
+  if (metiersCharges || tableChargee) redessinerToutLEcran();
 }
 
 /**
