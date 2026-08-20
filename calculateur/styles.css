@@ -118,6 +118,31 @@ input::placeholder { color: #4c574f; }
 .journal.en-succes { color: var(--a-moi); }
 .journal.en-echec  { color: var(--alerte); }
 
+/* ---- Bande du relevé OCR ----
+   Le Ctrl+V global fonctionne, mais rien ne le disait : un raccourci invisible
+   n'est pas une interface. La bande l'annonce, sa zone de repli sert quand un
+   champ avale le collage. Bordure orange, comme la quarantaine où ces prix
+   atterrissent. ---- */
+.bande-ocr {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 11px; color: var(--texte-attenue);
+  border: 1px dashed var(--bordure); border-left: 2px solid var(--en-quarantaine);
+  border-radius: 8px; padding: 6px 10px; margin-bottom: 8px;
+}
+.bande-ocr strong { color: var(--en-quarantaine); font-weight: 600; }
+.bande-ocr kbd {
+  background: #1b241d; border: 1px solid var(--bordure); border-radius: 4px;
+  padding: 1px 5px; font-family: inherit; font-size: 10px; color: var(--texte);
+}
+.bande-ocr button { margin-left: auto; }
+.zone-collage-ocr { margin-bottom: 8px; }
+.zone-collage-ocr textarea {
+  font: inherit; font-size: 12px; width: 100%; resize: vertical;
+  color: var(--texte); background: var(--fond-champ);
+  border: 1px dashed var(--en-quarantaine); border-radius: 8px; padding: 8px 10px;
+}
+.zone-collage-ocr textarea:focus { outline: none; border-color: var(--accent); }
+
 /* ---- Bandeau de résultats, collant en haut ---- */
 .bandeau-resultats {
   position: sticky; top: 0; z-index: 20;
@@ -519,6 +544,23 @@ input::placeholder { color: #4c574f; }
   cursor: pointer; margin-left: auto;
 }
 .selecteur-objectif:focus { outline: none; border-color: var(--accent); }
+
+/* ---- Rappel des crafts, au-dessus de la liste de courses ----
+   La liste agrège les ressources de toutes les recettes et perd ce qu'on est
+   venu faire : trois pains différents se partagent le blé. Trié par niveau, qui
+   est l'ordre des crafts quand la surcharge de poids interdit de tout porter
+   d'un coup. ---- */
+.rappel-des-crafts {
+  display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px;
+}
+.craft-rappele {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--fond-carte); border: 1px solid var(--bordure);
+  border-radius: 8px; padding: 4px 8px; font-size: 12px;
+}
+.craft-rappele img { width: 20px; height: 20px; flex: none; }
+.craft-rappele .nom-copiable { font-weight: 600; }
+.craft-rappele .quantite { font-variant-numeric: tabular-nums; color: var(--accent); }
 
 /* ============================================================
    LISTE DE COURSES DE LA FENÊTRE FLOTTANTE

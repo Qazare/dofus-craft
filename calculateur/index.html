@@ -30,6 +30,16 @@
 
 <div class="journal" id="journal"></div>
 
+<div class="bande-ocr">
+  <span><strong>Relevé du HDV</strong> — <kbd>Ctrl+V</kbd> n'importe où sur cette page.
+  Les prix arrivent en quarantaine, orange pointillé, et n'entrent nulle part avant ta coche.</span>
+  <button id="boutonZoneDeCollage" class="bouton-discret">Zone de collage</button>
+</div>
+<div class="zone-collage-ocr" id="zoneDeCollageOcr" hidden>
+  <textarea id="champDeCollageOcr" rows="3" spellcheck="false"
+            placeholder="Colle ici le relevé, il commence par #DOFUS-HDV/"></textarea>
+</div>
+
 <div class="bandeau-resultats" id="bandeauResultats"></div>
 
 <!-- Masquée tant qu'aucun métier n'est en jeu : la section n'a de sens qu'une

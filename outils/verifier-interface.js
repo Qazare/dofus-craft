@@ -506,6 +506,27 @@ verifier("cocher une ressource la sort du chemin",
 verifier("et le compte des courses le dit",
   (await pip.locator("#bandeauResultatsCompact").textContent()).includes("1 / 2"), true);
 
+// Le rappel des crafts : la liste de courses agrège les ressources, elle ne dit
+// plus quelle recette et en quelle quantité.
+verifier("le rappel nomme la recette à crafter",
+  await pip.locator(".craft-rappele .nom-copiable").first().textContent(), "Coiffe du Boufcoul");
+verifier("avec sa quantité",
+  await pip.locator(".craft-rappele .quantite").first().textContent(), "×2");
+verifier("et son niveau, qui donne l'ordre de priorité",
+  (await pip.locator(".craft-rappele").first().textContent()).includes("niv. 89"), true);
+
+// Un craft à quantité nulle ne consomme aucune ressource : il n'a rien à faire
+// dans un rappel de ce qu'il reste à faire.
+await page.fill("[data-champ='quantiteACrafter']", "0");
+await page.locator("[data-champ='quantiteACrafter']").press("Tab");
+await page.waitForTimeout(300);
+verifier("un craft à quantité nulle disparaît du rappel",
+  await pip.locator(".craft-rappele").count(), 0);
+
+await page.fill("[data-champ='quantiteACrafter']", "2");
+await page.locator("[data-champ='quantiteACrafter']").press("Tab");
+await page.waitForTimeout(300);
+
 await page.screenshot({ path: join(DOSSIER, "apercu.png"), fullPage: true });
 
 console.log("\nErreurs JavaScript :", erreursConsole.length === 0 ? "aucune" : erreursConsole);

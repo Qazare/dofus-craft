@@ -11,6 +11,21 @@ dans un navigateur, hors du jeu.
 
 ---
 
+## `git pull` en ouvrant, toujours
+
+Ce dépôt est travaillé depuis deux machines, et GitHub est la seule passerelle
+entre elles : **le dossier local est presque toujours en retard d'une session.**
+
+```bash
+git fetch origin && git status -sb && git pull --ff-only
+```
+
+Avant de lire le code, avant de chercher une fonctionnalité, avant de conclure
+qu'une chose manque. Le 20 08 2026, faute de ce réflexe, la montée de niveau par
+les crafts a été réécrite de zéro alors qu'elle existait déjà, poussée du Mac la
+veille et plus aboutie. La règle complète, à destination des agents comme de
+Brice, est dans `CLAUDE.md`.
+
 ## Où ça vit
 
 | | |
@@ -452,3 +467,7 @@ d'Alt+Tab.
 | 18 08 2026 | **Deux passes d'OCR, et la seconde n'est pas un luxe.** La première lit l'image entière et sert seulement à trouver le popup. La seconde le relit seul, agrandi ×3 : sur une capture de fenêtre entière, la passe large rate les libellés de lot les plus fins — `1` et `10` absents, `100` et `1 000` présents — et la moitié des prix se perdait avec eux. |
 | 18 08 2026 | **Bornes de cohérence entre lots corrigées, elles criaient au loup.** Un lot de 10 valant moins de dix fois l'unité est la situation normale au HDV, c'est même la raison d'acheter en lot : 490 l'unité contre 1 300 les dix, relevé réel. La borne basse vaut donc un cinquième de la taille du lot et non la taille elle-même. Bornes rejouées à l'identique côté site et côté script. |
 | 18 08 2026 | Touches de la relève fixées à `F6` et `F7`, avec `Maj` et `Ctrl` pour les variantes. `F8` et `F9` gèrent les affichages, `F1` appartient à Windows. Actives seulement quand Dofus est au premier plan : ailleurs les touches retrouvent leur comportement normal. |
+| 20 08 2026 | **L'identifiant de ressource devient facultatif dans le relevé OCR, et c'est le cas courant.** Le script de relève lit des pixels, il ne connaît pas la base d'objets d'Ankama : il laisse la colonne vide. L'exiger faisait rejeter en bloc toutes les lignes réelles. C'est le nom qui désigne alors la ressource, confronté à la liste FERMÉE des ressources de la session — quelques dizaines de noms, jamais un dictionnaire. Un nom ambigu n'est pas tranché au hasard : deux candidates, on n'attribue rien plutôt que de coller un prix sur la mauvaise ressource. |
+| 20 08 2026 | Bande de collage visible au-dessus des résultats. Le `Ctrl+V` global fonctionnait, mais rien ne le disait : un raccourci invisible n'est pas une interface. Sa zone de repli sert quand un champ avale le collage. |
+| 20 08 2026 | **Rappel des crafts dans la fenêtre flottante, au-dessus de la liste de courses.** La liste agrège les ressources de toutes les recettes — c'est ce qu'il faut devant le HDV, mais elle perd ce qu'on est venu faire : trois pains différents se partagent le blé. Le rappel redit chaque recette et sa quantité, trié par niveau croissant. L'ordre n'est pas décoratif : la surcharge de poids interdit de porter toutes les ressources d'un coup, il faut faire les crafts dans un ordre, et l'ordre utile est celui des niveaux. |
+| 20 08 2026 | **Un `git pull` manquant a fait réécrire de zéro une fonctionnalité qui existait.** La montée de niveau par les crafts a été refaite côté PC, moins bien, alors que le Mac l'avait poussée la veille. Le `push` rejeté l'a révélé trop tard. D'où `CLAUDE.md` à la racine : tirer avant de répondre, avant même de chercher. Seule consolation, les deux versions s'accordaient sur la courbe d'XP, `10 × n × (n−1)`. |

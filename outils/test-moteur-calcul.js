@@ -9,7 +9,8 @@
 import { calculerLAchatLeMoinsCher, calculerLApprovisionnementDUneRessource,
          calculerLaVenteLaPlusRentable }
   from "../calculateur/js/moteur.js";
-import { analyserUnCollageOcr, lireUnMontant, releverLesIncoherencesEntreLots }
+import { analyserUnCollageOcr, lireUnMontant, releverLesIncoherencesEntreLots,
+         resoudreLesRessources, normaliserUnNom }
   from "../calculateur/js/ingestion-ocr.js";
 import { DESTINATION_USAGE_PERSONNEL, DESTINATION_VENTE_PAR_LOT, DESTINATION_VENTE_UNITAIRE }
   from "../calculateur/js/config.js";
@@ -327,11 +328,19 @@ const collage = analyserUnCollageOcr(
   "#DOFUS-HDV/1\tbrial\t2026-08-18T14:22:11\n"
   + "289\tBlé\t125\t1200\t11000\t98000\t1250\t10\t0.93\n"
   + "290\tHoublon\t\t\t\t\t\t\t\n"
-  + "\tSansIdentifiant\t100\t\t\t\t\t\t");
+  + "\tSansIdentifiant\t100\t\t\t\t\t\t\n"
+  + "\t\t100\t\t\t\t\t\t");
 
 verifier("le serveur est lu dans l'en-tête", collage.serveur, "brial");
-verifier("une seule ligne exploitable sur trois", collage.lignes.length, 1);
-verifier("les deux autres sont rejetées", collage.rejets.length, 2);
+
+// La ligne sans identifiant est ACCEPTÉE. La relève réelle n'en fournit jamais :
+// elle lit des pixels et ne connaît pas la base d'objets d'Ankama. Exiger
+// l'identifiant faisait rejeter en bloc tout ce que le script produit, ce qui
+// était le cas de la première vraie capture.
+verifier("une ligne sans identifiant mais nommée est acceptée", collage.lignes.length, 2);
+verifier("celle sans prix et celle sans nom sont rejetées", collage.rejets.length, 2);
+verifier("la ligne sans identifiant le porte à null",
+  collage.lignes[1].identifiantAnkama, null);
 verifier("les quatre prix de lot sont lus",
   collage.lignes[0].prixParTailleDeLot, { 1: 125, 10: 1200, 100: 11000, 1000: 98000 });
 verifier("le prix moyen et sa taille de lot aussi",
@@ -615,6 +624,53 @@ const monteeImpossible = calculerLesCraftsPourAtteindreUnNiveau({
 });
 verifier("une recette éteinte bloque la montée", monteeImpossible.atteignable, false);
 verifier("et le niveau de blocage est annoncé", monteeImpossible.niveauDeBlocage, 140);
+
+console.log("\n--- Attribution d'un relevé aux ressources de la session ---");
+
+const ressourcesDeLaSession = [
+  { identifiantAnkama: 289, nom: "Blé" },
+  { identifiantAnkama: 290, nom: "Ailes de Moskito" }
+];
+
+const lignesDe = texte =>
+  analyserUnCollageOcr("#DOFUS-HDV/1\tbrial\t0\n\t" + texte + "\t994\t\t\t\t\t\t").lignes;
+
+verifier("les accents et la casse ne comptent pas",
+  normaliserUnNom("Ailes de Scarafeuille Blanc"), "ailes de scarafeuille blanc");
+verifier("la ponctuation non plus", normaliserUnNom("Blé   d'hiver !"), "ble d hiver");
+
+let attribution = resoudreLesRessources(lignesDe("Ailes de Moskito"), ressourcesDeLaSession);
+verifier("un nom exact désigne la ressource",
+  [attribution.resolues.length, attribution.resolues[0].identifiantAnkama], [1, 290]);
+
+// Le nom retenu est celui de la session, pas celui lu : c'est lui qui s'affiche
+// partout ailleurs, et une lecture approximative ne doit pas le contaminer.
+attribution = resoudreLesRessources(lignesDe("ailes de moskito"), ressourcesDeLaSession);
+verifier("le nom de la session fait foi", attribution.resolues[0].nom, "Ailes de Moskito");
+verifier("et la lecture brute est conservée à côté",
+  attribution.resolues[0].nomLuParLOcr, "ailes de moskito");
+
+attribution = resoudreLesRessources(lignesDe("Moskito"), ressourcesDeLaSession);
+verifier("un nom tronqué est rattrapé s'il ne désigne qu'une ressource",
+  attribution.resolues[0].identifiantAnkama, 290);
+
+attribution = resoudreLesRessources(lignesDe("Corne de Bouftou"), ressourcesDeLaSession);
+verifier("un nom inconnu de la session n'est pas deviné",
+  [attribution.resolues.length, attribution.nonResolues.length], [0, 1]);
+
+// Deux candidates : on préfère ne rien attribuer plutôt que de coller un prix sur
+// la mauvaise ressource.
+attribution = resoudreLesRessources(lignesDe("Ailes"),
+  [{ identifiantAnkama: 1, nom: "Ailes de Moskito" },
+   { identifiantAnkama: 2, nom: "Ailes de Scarafeuille" }]);
+verifier("un nom ambigu n'est pas tranché au hasard",
+  [attribution.resolues.length, attribution.nonResolues.length], [0, 1]);
+
+// Le texte de l'infobulle du script AHK entrait dans la capture et se retrouvait
+// dans la colonne du nom. Corrigé côté AHK, mais la ligne doit rester inoffensive.
+attribution = resoudreLesRessources(lignesDe("Lecture..."), ressourcesDeLaSession);
+verifier("un nom parasite ne s'attribue à rien",
+  [attribution.resolues.length, attribution.nonResolues.length], [0, 1]);
 
 console.log("\n" + (nombreDEchecs === 0
   ? "Tous les tests passent."

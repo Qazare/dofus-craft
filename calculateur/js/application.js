@@ -9,9 +9,9 @@ import { installerLaFenetreFlottante } from "./fenetre-flottante.js";
 import { synchroniserLesPrixDeLaSession, synchroniserLesRecettesDeLaSession } from "./crafts.js";
 import { ouvrirLaRevue } from "./revue.js";
 import { ouvrirLesReglages } from "./reglages.js";
-import { analyserUnCollageOcr } from "./ingestion-ocr.js";
+import { analyserUnCollageOcr, resoudreLesRessources } from "./ingestion-ocr.js";
 import { mettreEnQuarantaine } from "./quarantaine.js";
-import { listerLesIdentifiantsDesRessourcesDeLaSession } from "./analyse.js";
+import { listerLesRessourcesDeLaSession } from "./analyse.js";
 import { annoncer } from "./journal.js";
 
 const element = identifiant => document.getElementById(identifiant);
@@ -74,37 +74,86 @@ element("boutonReglages").addEventListener("click", ouvrirLesReglages);
    rien n'est publiable, tant que Brice n'a pas cliqué une coche.
    ============================================================ */
 
-document.addEventListener("paste", evenement => {
-  const texteColle = evenement.clipboardData ? evenement.clipboardData.getData("text") : "";
-  const collage = analyserUnCollageOcr(texteColle);
-  if (!collage.reconnu) return;
-
-  // Reconnu : on empêche le texte d'atterrir dans le champ qui avait le focus.
-  evenement.preventDefault();
+/**
+ * Ingère un texte de relevé. Rend faux si le texte n'est pas un relevé du tout,
+ * auquel cas l'appelant doit se taire et laisser le collage suivre son cours.
+ */
+function ingererUnReleveOcr(texte) {
+  const collage = analyserUnCollageOcr(texte);
+  if (!collage.reconnu) return false;
 
   if (collage.lignes.length === 0) {
-    annoncer("Collage OCR reçu, mais aucune ligne exploitable"
-      + (collage.rejets.length > 0 ? " (" + collage.rejets.length + " rejetée(s))" : "") + ".", "echec");
-    return;
+    annoncer("Relevé OCR reçu, mais aucune ligne exploitable"
+      + (collage.rejets.length > 0
+          ? " : " + collage.rejets.map(rejet => rejet.motif).join(", ") : "") + ".", "echec");
+    return true;
   }
 
-  const bilan = mettreEnQuarantaine(collage.lignes);
+  // Le relevé ne DÉSIGNE pas les ressources, il propose des noms : le script de
+  // relève lit des pixels, il ne connaît pas la base d'objets d'Ankama. C'est
+  // ici que les noms sont confrontés à la liste fermée des ressources de la
+  // session, et nulle part ailleurs.
+  const attribution = resoudreLesRessources(collage.lignes, listerLesRessourcesDeLaSession());
 
-  // Une ressource absente de la session ne s'affichera nulle part : elle
-  // resterait en quarantaine sans qu'aucun écran ne la montre. Le dire vaut
-  // mieux que de la faire disparaître en silence.
-  const identifiantsDeLaSession = new Set(listerLesIdentifiantsDesRessourcesDeLaSession());
-  const horsSession = collage.lignes
-    .filter(ligne => !identifiantsDeLaSession.has(ligne.identifiantAnkama)).length;
+  if (attribution.resolues.length === 0) {
+    annoncer("Relevé OCR reçu, mais aucun nom ne correspond à une ressource de la session : "
+      + attribution.nonResolues.map(ligne => ligne.nom || "sans nom").join(", ")
+      + ". Ajoute la recette qui en a besoin, puis recolle.", "echec");
+    return true;
+  }
+
+  const bilan = mettreEnQuarantaine(attribution.resolues);
 
   annoncer(bilan.nombreDeValeurs + " prix reçus de l'OCR sur "
-    + bilan.nombreDeRessources + " ressource(s), à confirmer."
+    + bilan.nombreDeRessources + " ressource(s), à confirmer d'une coche."
     + (bilan.nombreDeLignesDouteuses > 0
         ? " " + bilan.nombreDeLignesDouteuses + " à regarder en premier." : "")
-    + (horsSession > 0 ? " " + horsSession + " hors session, ajoute la recette pour la voir." : "")
+    // Une ligne non attribuée ne s'afficherait nulle part : la nommer vaut mieux
+    // que de la faire disparaître en silence, Brice vient de faire la capture.
+    + (attribution.nonResolues.length > 0
+        ? " Hors session, donc ignoré : "
+          + attribution.nonResolues.map(ligne => ligne.nom || "sans nom").join(", ") + "." : "")
     + (collage.rejets.length > 0 ? " " + collage.rejets.length + " ligne(s) illisible(s)." : ""));
 
   redessinerToutLEcran();
+  return true;
+}
+
+// Ctrl+V n'importe où sur la page. Un collage reconnu est intercepté avant
+// d'atterrir dans le champ qui avait le focus ; un collage ordinaire passe.
+document.addEventListener("paste", evenement => {
+  const texteColle = evenement.clipboardData ? evenement.clipboardData.getData("text") : "";
+  if (ingererUnReleveOcr(texteColle)) evenement.preventDefault();
+});
+
+/* ---- Zone de collage visible ----
+
+   Le Ctrl+V global fonctionne, mais rien ne le disait : « où est-ce que je
+   colle ? » est la première question qu'on se pose devant l'écran, et un
+   raccourci invisible n'est pas une interface. La bande le dit, et sa zone de
+   repli sert quand le focus est ailleurs ou qu'un champ avale le collage. ---- */
+
+const zoneDeCollage = element("zoneDeCollageOcr");
+const champDeCollage = element("champDeCollageOcr");
+
+element("boutonZoneDeCollage").addEventListener("click", () => {
+  const ouverte = zoneDeCollage.hasAttribute("hidden");
+  if (ouverte) {
+    zoneDeCollage.removeAttribute("hidden");
+    champDeCollage.value = "";
+    champDeCollage.focus();
+  } else {
+    zoneDeCollage.setAttribute("hidden", "");
+  }
+});
+
+champDeCollage.addEventListener("input", () => {
+  // Ingère dès que le texte arrive : le collage dans un champ dédié n'a pas
+  // besoin d'un bouton « valider » de plus.
+  if (ingererUnReleveOcr(champDeCollage.value)) {
+    champDeCollage.value = "";
+    zoneDeCollage.setAttribute("hidden", "");
+  }
 });
 
 redessinerToutLEcran();

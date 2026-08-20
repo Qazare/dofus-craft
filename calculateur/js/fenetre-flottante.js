@@ -16,6 +16,7 @@
  * un bouton mort.
  */
 import { analyserLaSessionComplete } from "./analyse.js";
+import { etatApplication } from "./etat.js";
 import { formaterMontantEnKamas, formaterNombreSimple, echapperPourHtml } from "./formats.js";
 import { construireLeNomCopiable } from "./cartes-de-craft.js";
 import { brancherLaCopieDesNoms } from "./presse-papier.js";
@@ -108,6 +109,7 @@ function preparerLeDocumentFlottant() {
 
   documentFlottant.body.innerHTML =
     '<div id="bandeauResultatsCompact" class="bandeau-resultats"></div>'
+    + '<div id="rappelDesCraftsCompact"></div>'
     + '<div id="conteneurRessourcesCompact"></div>';
   documentFlottant.body.style.padding = "10px";
 }
@@ -174,6 +176,8 @@ export function dessinerLaVueCompacte() {
           ? '<div class="precision prix-manquant">' + nombreSansPrix + " sans prix</div>"
           : '<div class="precision">pour ce qui reste</div>') + "</div>";
 
+  dessinerLeRappelDesCrafts(documentFlottant);
+
   const conteneur = documentFlottant.getElementById("conteneurRessourcesCompact");
 
   if (aAcheter.length === 0) {
@@ -197,6 +201,48 @@ export function dessinerLaVueCompacte() {
   conteneur.appendChild(liste);
   // Copier un nom depuis la fenêtre posée devant le jeu est même son usage le
   // plus direct : le nom part droit dans la barre de recherche du HDV.
+  brancherLaCopieDesNoms(conteneur);
+}
+
+/**
+ * Rappel des crafts, juste au-dessus de la liste de courses.
+ *
+ * La liste de courses agrège les ressources de toutes les recettes, et c'est ce
+ * qu'il faut devant le HDV. Mais elle perd au passage ce qu'on est venu faire :
+ * trois sortes de pain se partagent le blé, et rien ne dit plus combien de
+ * chacune. Ce rappel le redit, sans rien retirer des totaux au-dessus.
+ *
+ * Trié par niveau de recette croissant. Ce n'est pas décoratif : la surcharge de
+ * poids interdit de porter toutes les ressources d'un coup, il faut donc faire
+ * les crafts dans un ordre, et l'ordre utile est celui des niveaux — on monte
+ * par le bas.
+ *
+ * Le nom est copiable, comme dans la liste : il part droit dans la barre de
+ * recherche du HDV ou dans l'atelier.
+ */
+function dessinerLeRappelDesCrafts(documentFlottant) {
+  const conteneur = documentFlottant.getElementById("rappelDesCraftsCompact");
+
+  const craftsAFaire = etatApplication.craftsDeLaSession
+    .filter(craft => (craft.quantiteACrafter || 0) > 0)
+    .slice()
+    .sort((a, b) => (a.niveau || 0) - (b.niveau || 0));
+
+  if (craftsAFaire.length === 0) {
+    conteneur.innerHTML = "";
+    return;
+  }
+
+  conteneur.innerHTML = '<div class="rappel-des-crafts">'
+    + craftsAFaire.map(craft =>
+        '<div class="craft-rappele">'
+          + '<img src="' + echapperPourHtml(craft.adresseIcone) + '" alt="">'
+          + construireLeNomCopiable(craft.nom)
+          + '<span class="attenue petit">niv. ' + craft.niveau + "</span>"
+          + '<span class="quantite">×' + formaterNombreSimple(craft.quantiteACrafter) + "</span>"
+        + "</div>").join("")
+    + "</div>";
+
   brancherLaCopieDesNoms(conteneur);
 }
 
