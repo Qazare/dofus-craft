@@ -129,7 +129,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File outils/hdv/lire-le-hdv.ps1 -
 Chaque capture réelle est aussi écrite dans `journal/`. Sans ça, aucune
 régression d'OCR n'est diagnosticable.
 
-## Trois pièges déjà payés
+## Quatre pièges déjà payés
 
 - **`lire-le-hdv.ps1` doit rester en UTF-8 avec BOM.** PowerShell 5.1 lit un
   `.ps1` sans BOM comme de l'ANSI, et le moindre caractère accentué casse alors
@@ -138,6 +138,15 @@ régression d'OCR n'est diagnosticable.
 - **`HotIf()` en fonction, pas la directive `#HotIf`.** Les raccourcis sont posés
   par `Hotkey()` à l'exécution, et celui-ci ne connaît que le critère fonctionnel.
   Mélanger les deux donne des touches actives partout, navigateur compris.
+- **`SetProcessDPIAware()` avant tout appel de fenêtre.** Sans lui, Windows rend
+  à un processus des coordonnées logiques à 96 ppp alors que l'écran est à 150 % :
+  `GetWindowRect` annonce une fenêtre aux deux tiers de sa taille et la capture
+  s'arrête aux deux tiers. Les rangées ×100 et ×1000 tombaient hors de l'image.
+  Le pire des échecs, parce que silencieux : les deux prix restants étaient
+  exacts et rien ne signalait les manquants. Un contrôle le détecte maintenant.
+- **L'infobulle est effacée avant la capture.** Elle s'affiche près du curseur,
+  donc au-dessus du popup, et entrait dans l'image : son « Lecture… » se
+  retrouvait dans la colonne du nom, et ses mots décalaient les rangées.
 - **Un minuteur d'infobulle doit passer par une fonction nommée.** Avec une
   fonction anonyme, chaque appel crée un nouvel objet fonction donc un *nouveau*
   minuteur : celui du « Lecture… » survit et vient effacer le résultat une

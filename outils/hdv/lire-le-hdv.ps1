@@ -74,9 +74,26 @@ using System.Runtime.InteropServices;
 public class FenetreAuPremierPlan {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
 }
 "@
+
+# CONSCIENCE DU FACTEUR D'ÉCHELLE, AVANT TOUT APPEL DE FENÊTRE.
+#
+# Sans cet appel, Windows ment à ce processus : il lui rend des coordonnées
+# logiques, à 96 points par pouce, alors que l'écran est à 150 %. GetWindowRect
+# annonçait donc une fenêtre aux deux tiers de sa taille réelle, et la capture
+# s'arrêtait aux deux tiers — 2575 x 1455 au lieu de 3839 x 2118.
+#
+# Conséquence observée le 18 08 : les rangées x100 et x1000 du popup tombaient
+# hors de l'image. Le lecteur ne se trompait pas, il lisait juste un popup coupé,
+# ce qui est bien pire qu'une erreur franche : les deux prix restants étaient
+# exacts, et rien ne signalait les manquants.
+#
+# À appeler AVANT GetWindowRect et CopyFromScreen, les deux devant travailler
+# dans le même repère.
+[void][FenetreAuPremierPlan]::SetProcessDPIAware()
 
 function CapturerLaFenetreActive([string]$poigneeDemandee) {
   $poignee = if ($poigneeDemandee -ne "") { [IntPtr][int64]$poigneeDemandee }
@@ -324,10 +341,20 @@ function ExtraireLesPrix($mots) {
   } | Sort-Object y | Select-Object -First 1
   if ($null -ne $motDuNom) { $nomLu = $motDuNom.ligne }
 
+  # Bas de la dernière rangée lue, pour détecter un popup coupé par le bord de
+  # l'image. Voir le contrôle dans le déroulement : un popup tronqué rend des
+  # prix exacts ET incomplets, c'est le pire des deux mondes.
+  $basDesRangees = 0
+  foreach ($ordonnee in $rangeesDejaVues.Keys) {
+    if ($ordonnee -gt $basDesRangees) { $basDesRangees = $ordonnee }
+  }
+
   return [pscustomobject]@{
-    prixParLot = $prixParLot
-    prixMoyen  = $prixMoyen
-    nom        = $nomLu
+    prixParLot     = $prixParLot
+    prixMoyen      = $prixMoyen
+    nom            = $nomLu
+    basDesRangees  = $basDesRangees
+    hauteurDeLigne = $hauteurDeLigne
   }
 }
 
@@ -393,6 +420,7 @@ if ($Image -ne "") {
 # condition du fonctionnement en phase 0 ; il l'est encore ici.
 $mots = LireLesMots $bitmap 1
 $extraction = ExtraireLesPrix $mots
+$decalageDuRecadrage = 0
 
 $emprise = CalculerLEmpriseDuPopup $mots $bitmap
 if ($null -ne $emprise) {
@@ -407,8 +435,11 @@ if ($null -ne $emprise) {
   if ($null -ne $extractionFine -and
       $extractionFine.prixParLot.Count -ge (@{$true = $extraction.prixParLot.Count; $false = 0}[$null -ne $extraction])) {
     $extraction = $extractionFine
+    $decalageDuRecadrage = $emprise.Y
   }
 }
+
+$hauteurDeLImage = $bitmap.Height
 
 if ($JournalDossier -ne "") {
   # Sans journal, aucune regression d'OCR n'est diagnosticable : on garde
@@ -426,6 +457,22 @@ if ($null -eq $extraction -or $extraction.prixParLot.Count -eq 0) {
 }
 
 $anomalies = ReleverLesIncoherences $extraction.prixParLot
+
+# POPUP COUPÉ PAR LE BORD DE L'IMAGE : le pire des échecs, parce qu'il est
+# silencieux. Les prix lus sont exacts, ce sont ceux qui manquent qui font le
+# dégât — et rien ne les signale. Le cas s'est produit le 18 08, capture arrêtée
+# aux deux tiers de la fenêtre, x100 et x1000 hors champ.
+#
+# Signature : la dernière rangée lue touche le bas de l'image, et il manque des
+# lots. On préfère le dire même quand c'est le HDV lui-même qui ne propose pas
+# les gros lots : une alerte de trop coûte un coup d'oeil, un prix manquant
+# fausse un calcul.
+$basAbsoluDesRangees = $decalageDuRecadrage + $extraction.basDesRangees
+if ($extraction.prixParLot.Count -lt 4 -and
+    ($hauteurDeLImage - $basAbsoluDesRangees) -lt (2.5 * $extraction.hauteurDeLigne)) {
+  $anomalies += "popup coupe par le bas de l'image, des lots manquent peut-etre"
+}
+
 $confiance = if ($anomalies.Count -gt 0) { "0.3" } else { "0.95" }
 
 # Colonne 1 laissee vide : l'identifiant Ankama n'est pas devinable ici, c'est le

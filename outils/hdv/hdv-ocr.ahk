@@ -74,6 +74,20 @@ LireLePopup(poigneeDeLaFenetre) {
     global LECTEUR, JOURNAL
     sortie := A_Temp "\hdv-ocr-sortie.txt"
 
+    ; L'INFOBULLE EST EFFACÉE AVANT LA CAPTURE, ET CE N'EST PAS COSMÉTIQUE.
+    ;
+    ; Elle s'affiche près du curseur, donc au-dessus du popup au moment même où
+    ; on photographie l'écran. Elle entrait dans l'image, l'OCR la lisait comme
+    ; du texte du jeu, et son « Lecture… » se retrouvait dans la colonne du nom
+    ; — pire, ses mots décalaient les rangées et les prix changeaient de lot.
+    ;
+    ; Le Sleep laisse Windows repeindre la zone. Sans lui, on capture l'écran
+    ; d'avant l'effacement, ce qui revient au même. Et surtout : on efface une
+    ; fenêtre à nous, on ne touche pas à la souris — déplacer le curseur serait
+    ; envoyer une entrée au jeu, ce que ce script ne fait jamais.
+    ToolTip
+    Sleep 90
+
     commande := Format('{1} /c ""{2}" -NoProfile -ExecutionPolicy Bypass -File "{3}"'
         . ' -Poignee {4} -JournalDossier "{5}" > "{6}" 2>&1"',
         A_ComSpec, "powershell.exe", LECTEUR, poigneeDeLaFenetre, JOURNAL, sortie)
@@ -171,9 +185,8 @@ HotIf
 
 Capturer() {
     global fileDAttente
-    ; Délai large : la lecture dure une seconde ou deux, et ce message doit
-    ; rester le temps qu'elle se termine, pas s'effacer au milieu.
-    Infobulle("Lecture…", 20000)
+    ; Aucun message d'attente : il serait affiché par-dessus le popup et entrerait
+    ; dans la capture. La lecture dure une seconde ou deux, le retour vient après.
     resultat := LireLePopup(WinExist("A"))
 
     if resultat = "" {

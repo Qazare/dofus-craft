@@ -352,6 +352,24 @@ function chiffrerLaVenteDUnCraft(craft, destination, quantiteACrafter) {
 }
 
 /**
+ * Ressources de la session, avec leur nom. C'est la liste FERMÉE contre laquelle
+ * un nom lu par l'OCR est confronté — quelques dizaines d'entrées, jamais un
+ * dictionnaire, et c'est ce qui rend le rapprochement fiable.
+ */
+export function listerLesRessourcesDeLaSession() {
+  const parIdentifiant = new Map();
+  for (const craft of etatApplication.craftsDeLaSession) {
+    for (const ingredient of craft.ingredients) {
+      parIdentifiant.set(ingredient.identifiantAnkama, {
+        identifiantAnkama: ingredient.identifiantAnkama,
+        nom: ingredient.nom
+      });
+    }
+  }
+  return Array.from(parIdentifiant.values());
+}
+
+/**
  * Identifiants Ankama de tout ce que la session met en jeu : les ingrédients de
  * chaque recette, et les objets craftés eux-mêmes.
  *

@@ -97,12 +97,24 @@ export function analyserUnCollageOcr(texteColle) {
 function analyserUneLigne(ligneBrute) {
   const colonnes = ligneBrute.split("\t");
 
-  const identifiantAnkama = parseInt(String(colonnes[0] || "").trim(), 10);
-  if (!(identifiantAnkama > 0)) {
-    // Sans identifiant, impossible de savoir de quelle ressource on parle. Une
-    // capture qui ne vise rien de connu n'a rien à faire en quarantaine : elle
-    // y resterait sans jamais pouvoir être confirmée.
-    return { rejetee: true, motif: "identifiant de ressource absent ou illisible" };
+  // L'IDENTIFIANT EST FACULTATIF, ET C'EST LE CAS COURANT.
+  //
+  // Le script de relève ne peut pas le connaître : il lit des pixels, pas la
+  // base d'objets d'Ankama. Il laisse donc la colonne vide et remplit le nom.
+  // Exiger l'identifiant faisait rejeter en bloc tout ce que la relève produit,
+  // ce qui était le cas de toutes les lignes réelles.
+  //
+  // C'est le nom qui sert alors à désigner la ressource, confronté à la liste
+  // FERMÉE des ressources de la session — jamais à un dictionnaire. Voir
+  // `resoudreLesRessources` plus bas. Une ligne sans identifiant ni nom, en
+  // revanche, ne désigne rien et n'a rien à faire en quarantaine : elle y
+  // resterait sans jamais pouvoir être confirmée.
+  const identifiantLu = parseInt(String(colonnes[0] || "").trim(), 10);
+  const identifiantAnkama = identifiantLu > 0 ? identifiantLu : null;
+  const nomLu = String(colonnes[1] || "").trim();
+
+  if (identifiantAnkama === null && nomLu === "") {
+    return { rejetee: true, motif: "ni identifiant ni nom, la ligne ne désigne aucune ressource" };
   }
 
   const prixParTailleDeLot = {};
@@ -129,7 +141,7 @@ function analyserUneLigne(ligneBrute) {
     rejetee: false,
     ligne: {
       identifiantAnkama,
-      nom: String(colonnes[1] || "").trim(),
+      nom: nomLu,
       prixParTailleDeLot,
       prixMoyenDuLot: prixMoyenDuLot === null ? 0 : prixMoyenDuLot,
       tailleDuLotDuPrixMoyen: tailleDuLotDuPrixMoyen > 0
@@ -163,6 +175,98 @@ export function lireUnMontant(colonneBrute) {
   const montant = parseInt(texte, 10);
   if (montant < PRIX_MINIMAL_PLAUSIBLE || montant > PRIX_MAXIMAL_PLAUSIBLE) return null;
   return montant;
+}
+
+/* ============================================================
+   Résolution du nom vers une ressource de la session
+
+   L'OCR ne désigne pas la ressource, il propose un nom. C'est le calculateur
+   qui tranche, et il ne cherche que dans la LISTE FERMÉE des ressources de sa
+   session — quelques dizaines de noms, jamais un dictionnaire. C'est ce qui
+   rend le rapprochement fiable là où reconnaître un nom propre en texte libre
+   serait le problème le plus dur du lot.
+
+   La phase 0 a montré que les noms sortent exacts : « Ailes de Moskito »,
+   « Essence de la Shin Larve », « Ailes de Scarafeuille Blanc ». La tolérance
+   ci-dessous ne sert donc qu'aux accidents de bord, pas de béquille principale.
+   ============================================================ */
+
+/**
+ * Marques diacritiques, désignées par leur point de code et construites depuis
+ * une chaîne : une classe de caractères combinants tapée littéralement dans le
+ * source est invisible à la relecture et ne survit pas au premier outil qui
+ * normalise le fichier.
+ */
+const MARQUES_DIACRITIQUES = new RegExp("[\\u0300-\\u036f]", "g");
+
+/** Minuscules, sans accents, sans ponctuation : de quoi comparer deux noms. */
+export function normaliserUnNom(nom) {
+  return String(nom || "")
+    .normalize("NFD").replace(MARQUES_DIACRITIQUES, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Attribue chaque ligne à une ressource de la session.
+ *
+ * @param {Array} lignes  lignes rendues par `analyserUnCollageOcr`
+ * @param {Array<{identifiantAnkama:number, nom:string}>} ressourcesDeLaSession
+ * @returns {{resolues:Array, nonResolues:Array}}
+ *          Une ligne résolue porte un `identifiantAnkama` sûr. Les autres sont
+ *          rendues telles quelles, pour être nommées à l'écran : disparaître en
+ *          silence serait le pire des comportements, Brice vient de faire la
+ *          capture et attend quelque chose.
+ */
+export function resoudreLesRessources(lignes, ressourcesDeLaSession) {
+  const parIdentifiant = new Map();
+  const parNom = new Map();
+  for (const ressource of ressourcesDeLaSession || []) {
+    parIdentifiant.set(ressource.identifiantAnkama, ressource);
+    parNom.set(normaliserUnNom(ressource.nom), ressource);
+  }
+
+  const resolues = [];
+  const nonResolues = [];
+
+  for (const ligne of lignes) {
+    // Un identifiant explicite fait foi, sans discussion : il vient d'un format
+    // tapé à la main ou d'un export, pas d'une reconnaissance de caractères.
+    if (ligne.identifiantAnkama !== null && parIdentifiant.has(ligne.identifiantAnkama)) {
+      resolues.push(ligne);
+      continue;
+    }
+
+    const nomNormalise = normaliserUnNom(ligne.nom);
+    let ressourceTrouvee = parNom.get(nomNormalise) || null;
+
+    // Rattrapage : un nom tronqué ou allongé d'un mot parasite. On n'accepte que
+    // si UNE SEULE ressource de la session correspond — deux candidates, et on
+    // préfère ne rien deviner plutôt qu'attribuer un prix à la mauvaise.
+    if (!ressourceTrouvee && nomNormalise.length >= 4) {
+      const candidates = [];
+      for (const [nomDeLaSession, ressource] of parNom) {
+        if (nomDeLaSession.length < 4) continue;
+        if (nomDeLaSession.includes(nomNormalise) || nomNormalise.includes(nomDeLaSession)) {
+          candidates.push(ressource);
+        }
+      }
+      if (candidates.length === 1) ressourceTrouvee = candidates[0];
+    }
+
+    if (ressourceTrouvee) {
+      resolues.push(Object.assign({}, ligne, {
+        identifiantAnkama: ressourceTrouvee.identifiantAnkama,
+        nom: ressourceTrouvee.nom,
+        nomLuParLOcr: ligne.nom
+      }));
+    } else {
+      nonResolues.push(ligne);
+    }
+  }
+
+  return { resolues, nonResolues };
 }
 
 /**
