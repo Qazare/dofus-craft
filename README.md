@@ -81,6 +81,31 @@ l'XP, le calculateur chiffre l'opération. Ce qu'il fait et que duffus ne fait p
   popup ordinaire si elle manque.
 - **Session multi-recettes.** Ressources agrégées entre recettes, coût groupé,
   puis quote-part au prorata pour connaître le résultat objet par objet.
+- **Chaîne de sous-crafts.** Tout ingrédient qui a lui-même une recette porte un
+  bouton `Crafter`, dans la carte de la recette comme dans le tableau. Un clic et
+  il n'est plus acheté mais fabriqué : une carte en retrait apparaît sous celle
+  qu'elle sert, et ce sont ses propres ingrédients qui entrent dans la liste de
+  courses. Trois conséquences, dont aucune n'est cosmétique. Sa **quantité est
+  déduite**, jamais saisie : trois Substrats qui demandent chacun une Planche,
+  ce sont trois Planches, et rien ne permet d'en chiffrer deux. L'ingrédient
+  **sort du panier** du parent, sinon son coût serait compté deux fois, une fois
+  à l'achat et une fois par la chaîne. Et il **n'a pas de destination** : un
+  maillon intermédiaire ne se vend pas, son coût remonte jusqu'à la tête, qui
+  est la seule à porter un prix de vente. Sur chaque sous-craft, l'écart entre
+  son coût de fabrication et son prix au HDV donne l'arbitrage *le crafter ou
+  l'acheter*. Une ressource déjà produite plus haut dans la même branche est
+  refusée, ce qui ferme la porte aux chaînes sans fin — Dofus a des recettes qui
+  se citent en cascade.
+- **Métier et niveau requis**, en pastille à côté de chaque objet craftable. Ce
+  qui dit qu'une chaîne passe du bûcheron à l'alchimiste et revient, donc si elle
+  est faisable aujourd'hui. Servi par un fichier du dépôt, pas par une API — voir
+  la section des sources ci-dessous.
+- **Cliquer un nom le copie.** Dans les cartes, dans le tableau, dans la fenêtre
+  flottante. Le nom part tel quel dans la barre de recherche du HDV, où une faute
+  d'accent ne renvoie rien. Le nom seul, sans les pastilles qui l'entourent.
+- **Largeur bornée.** L'interface est en colonne unique et plafonnée à `150ch`,
+  environ 1 320 px. Sur un 4K, une page étirée de bord à bord rend le tableau
+  illisible : l'œil perd la ligne entre le nom d'une ressource et son coût.
 - **La base communautaire comme source de prix, pas comme béquille.** Les prix
   de dofus-calculator.fr, filtrés sur Brial, sont lus au démarrage et à chaque
   recette ajoutée. Ce que la base contient est un **vrai prix unitaire relevé au
@@ -131,9 +156,30 @@ l'XP, le calculateur chiffre l'opération. Ce qu'il fait et que duffus ne fait p
 |---|---|---|
 | **DofusDude** `api.dofusdu.de` | Recettes, noms, icônes | aucune |
 | **dofus-calculator.fr** `/api` | Prix HDV relevés par les joueurs, lecture et écriture | aucune en lecture, jeton en écriture |
-
-DofusDB a été écarté comme source de recettes : sa licence LPNC-IA interdit les
+DofusDB reste écarté, y compris pour le métier : sa licence LPNC-IA interdit les
 projets majoritairement produits par une IA.
+
+**Le métier ne vient donc d'aucune API, mais d'un fichier du dépôt.** Aucune de
+celles qui sont joignables ne porte la donnée, et ce n'est pas une supposition :
+le schéma `Recipe` officiel de DofusDude ne compte que trois champs — identifiant
+de l'ingrédient, sous-type, quantité — et ni `/jobs` ni `/recipes` n'existent
+chez lui ; Dofapi n'a pas le renseignement non plus, et son hôte refuse les
+connexions. `calculateur/donnees/metiers-par-recette.json` est extrait de
+**[Datafus](https://github.com/bot4dofus/Datafus)**, la base de Dofus tirée des
+fichiers du jeu et publiée sous **licence MIT**. Fabriqué par
+`outils/extraire-les-metiers.js`, versionné, à rejouer à chaque extension qui
+ajoute des recettes : 4 402 recettes pour 70 Ko.
+
+Trois bénéfices que l'appel réseau n'avait pas. Le fichier est servi par le même
+hébergeur que le reste du site, donc il ne peut pas tomber tout seul, et ne pose
+ni question de CORS ni de quota. Il est complet dès le premier chargement, là où
+un appel ne renseignait que les ressources déjà en session. Et il fonctionne
+hors ligne.
+
+La composition d'un craft, elle, continue de venir intégralement de DofusDude,
+qui porte seul les `item_subtype` sans lesquels un ingrédient n'est ni nommable
+ni illustrable. Le fichier dit **qu'il** y a une recette, jamais laquelle : une
+source par question, jamais deux sources pour la même.
 
 **Deux identifiants à ne jamais confondre**, la nuance coûte cher :
 
@@ -200,11 +246,14 @@ c'est ce qui permet aux tests d'importer le moteur sans traîner le DOM derrièr
 | `etat.js` | État, persistance, migrations de schéma, jeton. |
 | `moteur.js` | Programmation dynamique de l'achat. Pur, sans état ni DOM. |
 | `prix-communautaires.js` | Lecture du cache et préséance des prix. Pur. |
+| `arbre-de-crafts.js` | Structure de la chaîne, quantités déduites, ordre de calcul. Pur. |
 | `analyse.js` | Agrégation de la session et quote-part par objet. |
-| `api-dofusdude.js`, `api-prix.js` | Les deux accès réseau, et eux seuls. |
+| `api-dofusdude.js`, `api-prix.js`, `metiers.js` | Les trois accès réseau, et eux seuls. |
 | `journal.js` | Bandeau d'état. Rien ne part au réseau en silence. |
 | `cellules-de-prix.js` | Fabriques de cellules, partagées par les deux fenêtres. |
 | `vente.js` | Destination d'un craft, champs de vente, écoulement par lot. |
+| `cartes-de-craft.js` | En-tête, pastille de métier, liste des ingrédients d'une recette. |
+| `presse-papier.js` | Copie d'un nom, avec repli et retour visuel. |
 | `ingestion-ocr.js` | Lecture du format d'échange de l'OCR. Pur, sans DOM. |
 | `quarantaine.js` | `prixOcrEnAttente`, et l'unique passage vers la base personnelle. |
 | `vue.js`, `recherche.js`, `revue.js`, `reglages.js`, `fenetre-flottante.js` | Interface. |
@@ -224,6 +273,9 @@ donc servir le dossier, d'où `outils/servir.js`.
    Ils partiront un par un, à la ressaisie. Une revue complète au HDV réglerait
    la question en une séance.
 1. ~~**Vente par lot.**~~ Réglé le 18 08 2026, avec la destination du craft.
+1 bis. ~~**Dépendance à dofusdb pour le métier.**~~ Réglé le 20 08 2026 : la
+   donnée vient de Datafus, en MIT, figée dans un fichier du dépôt. Aucun appel
+   à un tiers, et la question de licence ne se pose plus.
 2. **Formule d'XP de craft.** Non résolue, et volontairement pas devinée. L'API
    DofusDude ne l'expose pas, le forum officiel refuse la lecture automatisée, et
    les chiffres relevés (niveau 89 : recette 90 → 1800 XP, 89 → 1618, 88 → 1449)
@@ -288,6 +340,7 @@ d'Alt+Tab.
 | 15 08 2026 | Mode craft en moitié droite pleine hauteur, le client Unity se redimensionne correctement. |
 | 15 08 2026 | Aucun organizer Dofus installé, la bascule de personnage sera ajoutée au script existant. |
 | 15 08 2026 | DofusDB écarté pour cause de licence LPNC-IA, DofusDude retenu. |
+| 20 08 2026 | Chaîne de sous-crafts, avec quantités déduites et coût qui remonte la branche. Métier et niveau requis extraits de Datafus, en MIT, dans un fichier versionné plutôt que par un appel — aucune API ne porte cette donnée, DofusDB reste écarté. Largeur bornée à `150ch`, et copie d'un nom au clic. |
 | 15 08 2026 | Taxe HDV fixée à 2 % du prix de vente. |
 | 15 08 2026 | Le calculateur est un fichier local et non un artefact, pour garder le stockage navigateur. |
 | 15 08 2026 | Le vert du tableau suit la recommandation d'achat, pas le meilleur prix unitaire. |

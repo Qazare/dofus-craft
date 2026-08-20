@@ -25,6 +25,50 @@ export const ADRESSE_BASE_API_DOFUSDUDE = "https://api.dofusdu.de/dofus3/v1/fr";
 export const FAMILLES_DOBJETS_CRAFTABLES = ["equipment", "consumables", "resources"];
 export const NOMBRE_DE_SUGGESTIONS_PAR_FAMILLE = 6;
 
+/* ---- Métiers et niveaux requis ----
+
+   Servis par un fichier du dépôt, pas par une API. Aucune de celles qui sont
+   joignables ne porte la donnée : le schéma `Recipe` officiel de DofusDude ne
+   compte que trois champs, ni `/jobs` ni `/recipes` n'existent chez lui, et
+   Dofapi n'a pas le renseignement non plus. dofusdb l'a, mais sa licence
+   LPNC-IA écarte les projets majoritairement produits par une IA — le motif
+   pour lequel il avait déjà été refusé comme source de recettes.
+
+   `donnees/metiers-par-recette.json` vient donc de Datafus, la base de Dofus
+   extraite des fichiers du jeu et publiée sous licence MIT. Fabriqué par
+   `outils/extraire-les-metiers.js`, versionné, à rejouer à chaque extension
+   du jeu qui ajoute des recettes.
+
+   Format volontairement compact, `{ identifiantAnkama: [jobId, niveau] }` :
+   le fichier est téléchargé par le navigateur, et nommer les champs
+   triplerait son poids pour une lisibilité dont seul l'outil a besoin. ---- */
+
+export const ADRESSE_DES_METIERS_PAR_RECETTE = "donnees/metiers-par-recette.json";
+
+/**
+ * Métiers de Dofus, indexés par le `jobId` des fichiers du jeu. Recopiés plutôt
+ * que dérivés : la liste tient en vingt lignes, ne bouge qu'à une extension, et
+ * l'avoir ici évite de faire porter au fichier de données un nom répété quatre
+ * mille fois.
+ */
+export const NOMS_DES_METIERS = {
+  1: "Base", 2: "Bûcheron", 11: "Forgeron", 13: "Sculpteur", 15: "Cordonnier",
+  16: "Bijoutier", 24: "Mineur", 26: "Alchimiste", 27: "Tailleur", 28: "Paysan",
+  36: "Pêcheur", 41: "Chasseur", 44: "Forgemage", 48: "Sculptemage",
+  60: "Façonneur", 62: "Cordomage", 63: "Joaillomage", 64: "Costumage",
+  65: "Bricoleur", 74: "Façomage", 75: "Parchomage", 78: "Bestiologue",
+  79: "Éleveur"
+};
+
+/**
+ * Profondeur maximale de la chaîne de sous-crafts.
+ *
+ * Une chaîne Dofus réelle dépasse rarement trois étages. La borne n'est pas là
+ * pour brider un usage légitime mais pour qu'une recette qui se contiendrait
+ * elle-même, par une donnée fausse en amont, ne déroule pas un arbre infini.
+ */
+export const PROFONDEUR_MAXIMALE_DE_SOUS_CRAFT = 6;
+
 /* ---- API des prix communautaires ----
 
    dofus-calculator.fr. Lecture ouverte, écriture avec jeton.
@@ -114,7 +158,7 @@ export const CLE_STOCKAGE_DE_LA_SESSION = "calculateur-craft-dofus-v1";
  */
 export const CLE_STOCKAGE_DU_JETON = "calculateur-craft-dofus-jeton";
 
-export const VERSION_COURANTE_DU_SCHEMA = 5;
+export const VERSION_COURANTE_DU_SCHEMA = 6;
 
 /* ---- Format d'échange de l'OCR ----
 

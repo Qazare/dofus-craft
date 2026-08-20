@@ -5,8 +5,25 @@
  * Acheter en lot pour plusieurs recettes à la fois coûte moins cher que recette
  * par recette : c'est pour cela que l'agrégation précède le chiffrage, et que le
  * coût par objet est une quote-part et non un calcul isolé.
+ *
+ * LA CHAÎNE DE CRAFTS, ET CE QU'ELLE IMPOSE À L'ORDRE DES CALCULS
+ *
+ * Depuis que les crafts s'enchaînent, une ressource peut être produite sur
+ * place au lieu d'être achetée. Deux règles en découlent, et l'ordre des étapes
+ * n'est plus indifférent :
+ *
+ *   L'agrégation descend l'arbre. Un sous-craft ne connaît sa quantité qu'une
+ *   fois celle de son parent résolue, donc les besoins ne peuvent pas être
+ *   comptés avant que l'arbre ne le soit.
+ *
+ *   Le chiffrage le remonte. Le coût d'un craft est celui de ses ingrédients
+ *   achetés PLUS celui de ses sous-crafts, qui doivent donc être chiffrés
+ *   d'abord. C'est aussi ce qui garantit qu'un ingrédient produit sur place
+ *   n'est compté qu'une fois : il sort de la liste de courses et entre par la
+ *   branche, jamais par les deux.
  */
 import { etatApplication, deduireLePrixMoyenUnitaire } from "./etat.js";
+import { construireLArbreDesCrafts } from "./arbre-de-crafts.js";
 import { calculerLApprovisionnementDUneRessource, calculerLaVenteLaPlusRentable } from "./moteur.js";
 import {
   DESTINATION_USAGE_PERSONNEL, DESTINATION_VENTE_PAR_LOT, DESTINATION_PAR_DEFAUT
@@ -19,12 +36,17 @@ import {
 export function analyserLaSessionComplete() {
   const tauxDeTaxe = (etatApplication.tauxDeTaxeEnPourcent || 0) / 100;
 
+  // --- Étape 0 : structure de la chaîne, et quantités qui en découlent ---
+  //
+  // Rien ne peut être compté avant cela : la quantité d'un sous-craft est celle
+  // de son parent multipliée par ce que la recette en demande.
+  const arbre = construireLArbreDesCrafts(etatApplication.craftsDeLaSession);
+
   // --- Étape 1 : agrégation des besoins, toutes recettes confondues ---
   const besoinsAgregesParRessource = {};
 
-  for (const craft of etatApplication.craftsDeLaSession) {
-    const quantiteACrafter = Math.max(0, craft.quantiteACrafter || 0);
-    for (const ingredient of craft.ingredients) {
+  for (const noeud of arbre.deLaRacineAuxFeuilles) {
+    for (const ingredient of noeud.craft.ingredients) {
       const cle = ingredient.identifiantAnkama;
       if (!besoinsAgregesParRessource[cle]) {
         besoinsAgregesParRessource[cle] = {
@@ -32,11 +54,21 @@ export function analyserLaSessionComplete() {
           sousType: ingredient.sousType,
           nom: ingredient.nom,
           adresseIcone: ingredient.adresseIcone,
-          quantiteTotaleNecessaire: 0
+          // Ce que la session consomme en tout, produit sur place compris.
+          quantiteTotaleNecessaire: 0,
+          // Ce qu'il faut réellement sortir acheter. Les deux ne se confondent
+          // qu'en l'absence de sous-craft, et c'est le second qui est chiffré :
+          // compter à l'achat ce qu'un atelier va produire ferait payer deux
+          // fois la même Planche de Surf.
+          quantiteAAcheter: 0
         };
       }
-      besoinsAgregesParRessource[cle].quantiteTotaleNecessaire +=
-        ingredient.quantiteParCraft * quantiteACrafter;
+
+      const quantiteDeCetteLigne = ingredient.quantiteParCraft * noeud.quantiteEffective;
+      besoinsAgregesParRessource[cle].quantiteTotaleNecessaire += quantiteDeCetteLigne;
+      if (!noeud.ingredientsProduitsSurPlace.has(cle)) {
+        besoinsAgregesParRessource[cle].quantiteAAcheter += quantiteDeCetteLigne;
+      }
     }
   }
 
@@ -52,19 +84,29 @@ export function analyserLaSessionComplete() {
     const prixDeLotEffectifs = construireLesPrixDeLotEffectifs(cle, fichePrix);
     const unitaireRetenu = determinerLePrixUnitaire(cle, fichePrix);
 
-    const achatOptimal = calculerLApprovisionnementDUneRessource(besoin.quantiteTotaleNecessaire, {
-      prixDeLotEffectifs,
-      prixMoyenUnitaire: deduireLePrixMoyenUnitaire(fichePrix),
-      modeEstimation: !!etatApplication.modeEstimationParPrixMoyen,
-      prixUnitaireDeRepli: unitaireRetenu.prix
-    });
+    // Une ressource entièrement produite par un atelier n'a pas de panier
+    // d'achat, et ne doit pas non plus compter parmi les prix manquants : son
+    // prix de HDV reste utile pour comparer craft et achat, mais son absence
+    // ne rend aucun total faux.
+    const entierementProduiteSurPlace = besoin.quantiteAAcheter === 0
+      && besoin.quantiteTotaleNecessaire > 0;
 
-    if (achatOptimal === null) nombreDeRessourcesSansPrix++;
-    else coutTotalDesRessources += achatOptimal.coutTotal;
+    const achatOptimal = entierementProduiteSurPlace
+      ? null
+      : calculerLApprovisionnementDUneRessource(besoin.quantiteAAcheter, {
+          prixDeLotEffectifs,
+          prixMoyenUnitaire: deduireLePrixMoyenUnitaire(fichePrix),
+          modeEstimation: !!etatApplication.modeEstimationParPrixMoyen,
+          prixUnitaireDeRepli: unitaireRetenu.prix
+        });
+
+    if (achatOptimal === null && !entierementProduiteSurPlace) nombreDeRessourcesSansPrix++;
+    else if (achatOptimal !== null) coutTotalDesRessources += achatOptimal.coutTotal;
 
     lignesDeRessources.push({
       besoin,
       achatOptimal,
+      entierementProduiteSurPlace,
       // Provenance du ×1 : « personnel » si Brice l'a relevé, « communautaire »
       // s'il vient de la base, null s'il n'y en a aucun. C'est ce champ qui
       // pilote la couleur du champ à l'écran, jamais une déduction refaite là-bas.
@@ -79,14 +121,33 @@ export function analyserLaSessionComplete() {
 
   lignesDeRessources.sort((a, b) => a.besoin.nom.localeCompare(b.besoin.nom, "fr"));
 
-  // --- Étape 3 : répartition du coût groupé sur chaque objet, au prorata ---
+  // --- Étape 3 : chiffrage des crafts, des feuilles vers les racines ---
   const coutUnitaireEffectifParRessource = {};
+  const prixUnitaireDeMarcheParRessource = {};
   for (const ligne of lignesDeRessources) {
     coutUnitaireEffectifParRessource[ligne.besoin.identifiantAnkama] =
       ligne.achatOptimal ? ligne.achatOptimal.prixUnitaireEffectif : null;
+    prixUnitaireDeMarcheParRessource[ligne.besoin.identifiantAnkama] =
+      ligne.prixUnitaireRetenu || 0;
   }
 
-  const bilansParCraft = [];
+  const bilansParLigne = new Map();
+
+  // À l'envers du parcours en largeur : les enfants d'abord, puisqu'un parent
+  // additionne leur coût au sien.
+  for (let rang = arbre.deLaRacineAuxFeuilles.length - 1; rang >= 0; rang--) {
+    const noeud = arbre.deLaRacineAuxFeuilles[rang];
+    bilansParLigne.set(noeud.craft.identifiantDeLigne,
+      chiffrerUnCraft(noeud, bilansParLigne, tauxDeTaxe, {
+        coutUnitaireEffectifParRessource, prixUnitaireDeMarcheParRessource
+      }));
+  }
+
+  // --- Étape 4 : totaux de session, sur les seuls crafts de tête ---
+  //
+  // Un sous-craft n'a ni revenu ni destination : son coût est déjà dans celui
+  // de son parent, l'ajouter au total le compterait deux fois. Son XP, elle,
+  // est bien gagnée et se compte partout.
   let revenuBrutTotal = 0;
   let taxeTotale = 0;
   let coutAttribueTotal = 0;
@@ -97,62 +158,28 @@ export function analyserLaSessionComplete() {
   // acquisition, et le seul arbitrage qui vaille est son prix au HDV.
   let coutDesCraftsPourUsagePersonnel = 0;
 
-  for (const craft of etatApplication.craftsDeLaSession) {
-    const quantiteACrafter = Math.max(0, craft.quantiteACrafter || 0);
+  for (const noeud of arbre.deLaRacineAuxFeuilles) {
+    const bilan = bilansParLigne.get(noeud.craft.identifiantDeLigne);
+    experienceTotaleGagnee += bilan.experienceGagnee;
 
-    let coutDesRessourcesDeCeCraft = 0;
-    let auMoinsUnPrixManquantDansCeCraft = false;
+    if (bilan.estUnSousCraft) continue;
 
-    for (const ingredient of craft.ingredients) {
-      const coutUnitaire = coutUnitaireEffectifParRessource[ingredient.identifiantAnkama];
-      if (coutUnitaire === null || coutUnitaire === undefined) {
-        auMoinsUnPrixManquantDansCeCraft = true;
-      } else {
-        coutDesRessourcesDeCeCraft += coutUnitaire * ingredient.quantiteParCraft * quantiteACrafter;
-      }
-    }
-
-    const destination = craft.destination || DESTINATION_PAR_DEFAUT;
-    const vente = chiffrerLaVenteDUnCraft(craft, destination, quantiteACrafter);
-
-    const revenuBrutDeCeCraft = vente.revenuBrut;
-    const taxeDeCeCraft = revenuBrutDeCeCraft * tauxDeTaxe;
-    const profitDeCeCraft = revenuBrutDeCeCraft - taxeDeCeCraft - coutDesRessourcesDeCeCraft;
-    const experienceDeCeCraft = (craft.experienceParCraft || 0) * quantiteACrafter;
-
-    if (destination === DESTINATION_USAGE_PERSONNEL) {
-      coutDesCraftsPourUsagePersonnel += coutDesRessourcesDeCeCraft;
+    if (bilan.destination === DESTINATION_USAGE_PERSONNEL) {
+      coutDesCraftsPourUsagePersonnel += bilan.coutDesRessources;
     } else {
-      revenuBrutTotal += revenuBrutDeCeCraft;
-      taxeTotale += taxeDeCeCraft;
-      coutAttribueTotal += coutDesRessourcesDeCeCraft;
+      revenuBrutTotal += bilan.revenuBrut;
+      taxeTotale += bilan.taxe;
+      coutAttribueTotal += bilan.coutDesRessources;
     }
-    experienceTotaleGagnee += experienceDeCeCraft;
-
-    bilansParCraft.push({
-      identifiantDeLigne: craft.identifiantDeLigne,
-      destination,
-      // Découpage retenu pour écouler la production, en vente par lot. null
-      // dans les deux autres destinations, où la question ne se pose pas.
-      venteOptimale: vente.venteOptimale,
-      quantiteInvendue: vente.quantiteInvendue,
-      coutDesRessources: coutDesRessourcesDeCeCraft,
-      coutParObjet: quantiteACrafter > 0 ? coutDesRessourcesDeCeCraft / quantiteACrafter : 0,
-      revenuBrut: revenuBrutDeCeCraft,
-      taxe: taxeDeCeCraft,
-      profitTotal: profitDeCeCraft,
-      profitParObjet: quantiteACrafter > 0 ? profitDeCeCraft / quantiteACrafter : 0,
-      prixDeVenteMinimalPourNePasPerdre:
-        quantiteACrafter > 0 && tauxDeTaxe < 1
-          ? (coutDesRessourcesDeCeCraft / quantiteACrafter) / (1 - tauxDeTaxe)
-          : 0,
-      auMoinsUnPrixManquant: auMoinsUnPrixManquantDansCeCraft
-    });
   }
 
   return {
+    arbre,
     lignesDeRessources,
-    bilansParCraft,
+    // Conservé sous forme de tableau : c'est la forme attendue par la vue et
+    // par les tests, et l'ordre est celui du parcours de l'arbre.
+    bilansParCraft: arbre.deLaRacineAuxFeuilles
+      .map(noeud => bilansParLigne.get(noeud.craft.identifiantDeLigne)),
     coutTotalDesRessources,
     revenuBrutTotal,
     taxeTotale,
@@ -160,6 +187,89 @@ export function analyserLaSessionComplete() {
     coutDesCraftsPourUsagePersonnel,
     experienceTotaleGagnee,
     nombreDeRessourcesSansPrix
+  };
+}
+
+/**
+ * Bilan d'un craft : ce qu'il coûte, ce qu'il rapporte, et à quel prix il
+ * cesserait d'être rentable.
+ *
+ * Appelée des feuilles vers la racine, elle lit dans `bilansParLigne` ceux de
+ * ses enfants, qui y sont donc forcément déjà.
+ */
+function chiffrerUnCraft(noeud, bilansParLigne, tauxDeTaxe, prix) {
+  const craft = noeud.craft;
+  const estUnSousCraft = noeud.parent !== null;
+
+  // --- Ce que ce craft achète pour son propre compte ---
+  let coutDesRessources = 0;
+  let auMoinsUnPrixManquant = false;
+
+  for (const ingredient of craft.ingredients) {
+    // Produit par un atelier de la session : son coût arrive par la branche,
+    // pas par la liste de courses.
+    if (noeud.ingredientsProduitsSurPlace.has(ingredient.identifiantAnkama)) continue;
+
+    const coutUnitaire = prix.coutUnitaireEffectifParRessource[ingredient.identifiantAnkama];
+    if (coutUnitaire === null || coutUnitaire === undefined) {
+      auMoinsUnPrixManquant = true;
+    } else {
+      coutDesRessources += coutUnitaire * ingredient.quantiteParCraft * noeud.quantiteEffective;
+    }
+  }
+
+  // --- Ce que ses sous-crafts lui coûtent ---
+  //
+  // Un prix manquant chez un enfant remonte : sans lui, le coût du parent est
+  // sous-estimé tout autant, et ne rien dire à l'étage du dessus laisserait
+  // croire à un chiffre complet.
+  for (const enfant of noeud.enfants) {
+    const bilanDeLEnfant = bilansParLigne.get(enfant.craft.identifiantDeLigne);
+    if (!bilanDeLEnfant) continue;
+    coutDesRessources += bilanDeLEnfant.coutDesRessources;
+    if (bilanDeLEnfant.auMoinsUnPrixManquant) auMoinsUnPrixManquant = true;
+  }
+
+  const quantite = noeud.quantiteEffective;
+  const coutParObjet = quantite > 0 ? coutDesRessources / quantite : 0;
+
+  // Un sous-craft ne se vend pas : il est consommé par son parent. Lui prêter
+  // une destination et un revenu ferait apparaître dans le résultat de session
+  // une vente qui n'aura jamais lieu.
+  const destination = estUnSousCraft ? null : (craft.destination || DESTINATION_PAR_DEFAUT);
+  const vente = estUnSousCraft
+    ? { revenuBrut: 0, venteOptimale: null, quantiteInvendue: 0 }
+    : chiffrerLaVenteDUnCraft(craft, destination, quantite);
+
+  const taxe = vente.revenuBrut * tauxDeTaxe;
+  const profitTotal = vente.revenuBrut - taxe - coutDesRessources;
+
+  return {
+    identifiantDeLigne: craft.identifiantDeLigne,
+    destination,
+    estUnSousCraft,
+    profondeur: noeud.profondeur,
+    // Quantité réellement produite : saisie sur un craft de tête, déduite du
+    // parent sur un sous-craft. C'est elle que la carte affiche.
+    quantiteEffective: quantite,
+    // Prix unitaire au HDV de l'objet produit, quand il est connu. Sur un
+    // sous-craft, c'est la moitié manquante de l'arbitrage « le crafter ou
+    // l'acheter » : le coût par objet ci-dessus est l'autre.
+    prixUnitaireAuMarche: prix.prixUnitaireDeMarcheParRessource[craft.identifiantAnkama] || 0,
+    // Découpage retenu pour écouler la production, en vente par lot. null
+    // dans les autres destinations, où la question ne se pose pas.
+    venteOptimale: vente.venteOptimale,
+    quantiteInvendue: vente.quantiteInvendue,
+    coutDesRessources,
+    coutParObjet,
+    revenuBrut: vente.revenuBrut,
+    taxe,
+    profitTotal,
+    profitParObjet: quantite > 0 ? profitTotal / quantite : 0,
+    experienceGagnee: (craft.experienceParCraft || 0) * quantite,
+    prixDeVenteMinimalPourNePasPerdre:
+      quantite > 0 && tauxDeTaxe < 1 ? coutParObjet / (1 - tauxDeTaxe) : 0,
+    auMoinsUnPrixManquant
   };
 }
 
@@ -191,10 +301,19 @@ function chiffrerLaVenteDUnCraft(craft, destination, quantiteACrafter) {
   };
 }
 
-/** Identifiants Ankama de toutes les ressources présentes dans la session. */
+/**
+ * Identifiants Ankama de tout ce que la session met en jeu : les ingrédients de
+ * chaque recette, et les objets craftés eux-mêmes.
+ *
+ * Les objets craftés en font partie depuis la chaîne de crafts, et ce n'est pas
+ * un excès de zèle : le prix de HDV d'un Substrat de Futaie est exactement ce
+ * qui permet de dire s'il vaut mieux le crafter ou l'acheter. Sans lui,
+ * l'arbitrage n'a qu'une moitié.
+ */
 export function listerLesIdentifiantsDesRessourcesDeLaSession() {
   const identifiants = [];
   for (const craft of etatApplication.craftsDeLaSession) {
+    identifiants.push(craft.identifiantAnkama);
     for (const ingredient of craft.ingredients) identifiants.push(ingredient.identifiantAnkama);
   }
   return identifiants;

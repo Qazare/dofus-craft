@@ -65,6 +65,28 @@ async function interrogerUneFamille(famille, termeDeRecherche) {
 }
 
 /**
+ * Objet complet, recette comprise, à partir de son identifiant Ankama.
+ *
+ * La recherche par nom rapporte déjà la recette des objets qu'elle propose,
+ * mais un sous-craft ne passe pas par la recherche : il part d'un ingrédient
+ * déjà présent dans une autre recette, dont on ne connaît que l'identifiant.
+ * C'est ce chemin-là que cette fonction ouvre.
+ *
+ * Le détail est LA source de la composition, y compris quand la table des
+ * métiers a déjà annoncé que l'objet se craftait : lui seul porte les
+ * `item_subtype`, sans lesquels ni le nom ni l'icône d'un ingrédient ne sont
+ * résolvables. Une source par question, jamais deux sources pour la même.
+ */
+export async function obtenirLObjetCompletAvecSaRecette(identifiantAnkama, sousTypeDObjet) {
+  const adresse = ADRESSE_BASE_API_DOFUSDUDE + "/items/" + sousTypeDObjet + "/" + identifiantAnkama;
+  const reponse = await fetch(adresse);
+  if (!reponse.ok) {
+    throw new Error("Recette de l'objet " + identifiantAnkama + " illisible, code " + reponse.status);
+  }
+  return reponse.json();
+}
+
+/**
  * Résout le nom et l'icône d'un objet à partir de son identifiant Ankama.
  * Ces données ne changent pas entre deux mises à jour du jeu : mises en cache
  * définitivement, l'API n'est plus jamais rappelée dessus.

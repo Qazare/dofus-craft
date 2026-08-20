@@ -17,6 +17,12 @@ import { construireLaCelluleDuPrixUnitaire, construireLesCellulesDesGrosLots,
 import { construireLeSelecteurDeDestination, construireLesChampsDeVente,
          construireLaLigneDeBilan } from "./vente.js";
 import { construireLaPastilleDeQuarantaine } from "./cellules-de-prix.js";
+import { construireLEnteteDeCraft, construireLaListeDesIngredients,
+         construireLArbitrageCraftOuAchat, construireLeNomCopiable,
+         construireLaPastilleDeMetier } from "./cartes-de-craft.js";
+import { crafterUneRessourceSurPlace, retirerUnCraftEtSaDescendance } from "./crafts.js";
+import { lireLaRecetteConnue } from "./metiers.js";
+import { brancherLaCopieDesNoms } from "./presse-papier.js";
 import { confirmerUnPrixEnQuarantaine, confirmerToutesLesValeursDUneRessource,
          oublierLaQuarantaine } from "./quarantaine.js";
 import { publierUnPrixUnitaire, laPublicationEstPossible } from "./api-prix.js";
@@ -113,72 +119,129 @@ function dessinerLesCraftsDeLaSession(analyse) {
 
   conteneurCrafts.innerHTML = "";
 
-  for (const craft of etatApplication.craftsDeLaSession) {
-    const bilan = analyse.bilansParCraft.find(b => b.identifiantDeLigne === craft.identifiantDeLigne);
+  // L'arbre est parcouru dans l'ordre où il doit être lu : un parent, puis sa
+  // branche entière, puis le parent suivant. C'est le parcours en profondeur
+  // d'`arbre-de-crafts.js`, et c'est aussi la raison pour laquelle c'en est un.
+  for (const noeud of analyse.arbre.deLaRacineAuxFeuilles) {
+    const bilan = analyse.bilansParCraft
+      .find(b => b.identifiantDeLigne === noeud.craft.identifiantDeLigne);
+    conteneurCrafts.appendChild(dessinerUneCarteDeCraft(noeud, bilan, analyse));
+  }
 
-    const carte = document.createElement("div");
-    carte.className = "carte-craft";
-    carte.innerHTML =
-      '<div class="entete-craft">'
-        + '<img src="' + echapperPourHtml(craft.adresseIcone) + '" alt="">'
-        + '<div><div class="nom-craft">' + echapperPourHtml(craft.nom) + "</div>"
-        + '<div class="niveau-craft">Niveau ' + craft.niveau + " · "
-        + craft.ingredients.length + " ingrédients</div></div>"
-        + '<button class="bouton-discret" style="margin-left:auto" data-action="supprimer">Retirer</button>'
-      + "</div>"
-      + '<div class="grille-champs-craft">'
-        + '<div class="champ-etiquete"><label class="etiquette">Quantité</label>'
-          + '<input data-champ="quantiteACrafter" value="' + craft.quantiteACrafter + '"></div>'
-        + construireLeSelecteurDeDestination(craft)
-        + '<div class="champ-etiquete"><label class="etiquette">XP par craft à ton niveau</label>'
-          + '<input data-champ="experienceParCraft" value="'
-          + (craft.experienceParCraft ? craft.experienceParCraft : "") + '" placeholder="ex. 1618"></div>'
-        + construireLesChampsDeVente(craft)
-      + "</div>"
-      + construireLaLigneDeBilan(craft, bilan);
+  brancherLaCopieDesNoms(conteneurCrafts);
+}
 
-    carte.querySelector('[data-action="supprimer"]').addEventListener("click", () => {
-      etatApplication.craftsDeLaSession = etatApplication.craftsDeLaSession
-        .filter(c => c.identifiantDeLigne !== craft.identifiantDeLigne);
-      sauvegarderEtat();
+function dessinerUneCarteDeCraft(noeud, bilan, analyse) {
+  const craft = noeud.craft;
+
+  const carte = document.createElement("div");
+  carte.className = "carte-craft" + (bilan.estUnSousCraft ? " carte-sous-craft" : "");
+  // La profondeur pilote le décalage en CSS plutôt qu'un style en ligne : c'est
+  // la feuille de style qui décide de combien un étage s'enfonce, et elle peut
+  // le faire dépendre de la largeur de l'écran.
+  carte.style.setProperty("--profondeur", String(noeud.profondeur));
+
+  carte.innerHTML =
+    construireLEnteteDeCraft(craft, bilan)
+    + '<div class="grille-champs-craft">'
+      + construireLeChampDeQuantite(craft, bilan)
+      + (bilan.estUnSousCraft ? "" : construireLeSelecteurDeDestination(craft))
+      + '<div class="champ-etiquete"><label class="etiquette">XP par craft à ton niveau</label>'
+        + '<input data-champ="experienceParCraft" value="'
+        + (craft.experienceParCraft ? craft.experienceParCraft : "") + '" placeholder="ex. 1618"></div>'
+      + (bilan.estUnSousCraft ? "" : construireLesChampsDeVente(craft))
+    + "</div>"
+    + construireLaListeDesIngredients(craft, noeud, analyse.lignesDeRessources)
+    + construireLaLigneDeBilan(craft, bilan);
+
+  brancherLesActionsDUneCarte(carte, craft, noeud);
+  return carte;
+}
+
+/**
+ * Quantité : saisissable sur un craft de tête, affichée sur un sous-craft.
+ *
+ * Un sous-craft produit exactement ce que son parent consomme. Offrir un champ
+ * modifiable laisserait chiffrer une session où l'on fabrique deux Planches
+ * pour trois Substrats — un plan qui ne s'exécute pas, et que rien à l'écran ne
+ * viendrait contredire.
+ */
+function construireLeChampDeQuantite(craft, bilan) {
+  if (!bilan.estUnSousCraft) {
+    return '<div class="champ-etiquete"><label class="etiquette">Quantité</label>'
+      + '<input data-champ="quantiteACrafter" value="' + craft.quantiteACrafter + '"></div>';
+  }
+
+  return '<div class="champ-etiquete"><label class="etiquette">Quantité déduite</label>'
+    + '<div class="valeur-deduite" title="Ce que la recette du dessus consomme.'
+    + ' Change avec la quantité du craft parent.">'
+    + formaterNombreSimple(bilan.quantiteEffective) + "</div></div>";
+}
+
+function brancherLesActionsDUneCarte(carte, craft, noeud) {
+  carte.querySelector('[data-action="supprimer"]').addEventListener("click", () => {
+    const nombreRetire = retirerUnCraftEtSaDescendance(craft.identifiantDeLigne);
+    // La cascade est silencieuse quand elle n'emporte que la carte cliquée, et
+    // annoncée dès qu'elle en emporte d'autres : voir disparaître trois cartes
+    // pour un clic mérite une explication.
+    if (nombreRetire > 1) {
+      annoncer(craft.nom + " retiré, avec les " + (nombreRetire - 1)
+        + " sous-craft(s) qui le servaient.");
+    }
+    redessinerToutLEcran();
+  });
+
+  for (const bouton of carte.querySelectorAll("[data-crafter-ingredient]")) {
+    bouton.addEventListener("click", async () => {
+      const identifiant = parseInt(bouton.getAttribute("data-crafter-ingredient"), 10);
+      // Désarmé le temps de l'appel : la recette part chercher sa composition
+      // chez DofusDude, et deux clics pendant ce délai ajouteraient deux fois
+      // le même sous-craft, la garde ne voyant encore ni l'un ni l'autre.
+      bouton.disabled = true;
+      annoncer("Ouverture de la recette…", "en-cours");
+
+      const resultat = await crafterUneRessourceSurPlace(identifiant, craft.identifiantDeLigne);
+      annoncer(resultat.message, resultat.ajoute ? "succes" : "echec");
+      if (!resultat.ajoute) bouton.disabled = false;
       redessinerToutLEcran();
     });
+  }
 
-    // Changer la destination redessine la carte : les champs de vente ne sont
-    // pas les mêmes d'un mode à l'autre. Les prix déjà saisis sont conservés des
-    // deux côtés, on compare souvent l'unitaire et le lot avant de trancher.
-    carte.querySelector("[data-destination]").addEventListener("change", evenement => {
+  const selecteurDeDestination = carte.querySelector("[data-destination]");
+  // Changer la destination redessine la carte : les champs de vente ne sont pas
+  // les mêmes d'un mode à l'autre. Les prix déjà saisis sont conservés des deux
+  // côtés, on compare souvent l'unitaire et le lot avant de trancher.
+  if (selecteurDeDestination) {
+    selecteurDeDestination.addEventListener("change", evenement => {
       craft.destination = evenement.target.value;
       sauvegarderEtat();
       redessinerToutLEcran();
     });
+  }
 
-    for (const champ of carte.querySelectorAll("[data-vente-taille-de-lot]")) {
-      champ.addEventListener("change", () => {
-        const taille = parseInt(champ.getAttribute("data-vente-taille-de-lot"), 10);
-        if (!craft.prixDeVenteParTailleDeLot) craft.prixDeVenteParTailleDeLot = {};
-        craft.prixDeVenteParTailleDeLot[taille] = interpreterSaisieDeMontant(champ.value);
-        sauvegarderEtat();
-        redessinerToutLEcran();
-      });
-    }
+  for (const champ of carte.querySelectorAll("[data-vente-taille-de-lot]")) {
+    champ.addEventListener("change", () => {
+      const taille = parseInt(champ.getAttribute("data-vente-taille-de-lot"), 10);
+      if (!craft.prixDeVenteParTailleDeLot) craft.prixDeVenteParTailleDeLot = {};
+      craft.prixDeVenteParTailleDeLot[taille] = interpreterSaisieDeMontant(champ.value);
+      sauvegarderEtat();
+      redessinerToutLEcran();
+    });
+  }
 
-    for (const champ of carte.querySelectorAll("[data-champ]")) {
-      champ.addEventListener("change", () => {
-        const nomDuChamp = champ.getAttribute("data-champ");
-        const valeur = interpreterSaisieDeMontant(champ.value);
-        craft[nomDuChamp] = valeur;
-        // L'XP relevée est mémorisée pour que la recette revienne pré-remplie.
-        // Elle dépend du niveau de métier, donc à corriger après chaque montée.
-        if (nomDuChamp === "experienceParCraft") {
-          etatApplication.memoireExperienceParRecette[craft.identifiantAnkama] = valeur;
-        }
-        sauvegarderEtat();
-        redessinerToutLEcran();
-      });
-    }
-
-    conteneurCrafts.appendChild(carte);
+  for (const champ of carte.querySelectorAll("[data-champ]")) {
+    champ.addEventListener("change", () => {
+      const nomDuChamp = champ.getAttribute("data-champ");
+      const valeur = interpreterSaisieDeMontant(champ.value);
+      craft[nomDuChamp] = valeur;
+      // L'XP relevée est mémorisée pour que la recette revienne pré-remplie.
+      // Elle dépend du niveau de métier, donc à corriger après chaque montée.
+      if (nomDuChamp === "experienceParCraft") {
+        etatApplication.memoireExperienceParRecette[craft.identifiantAnkama] = valeur;
+      }
+      sauvegarderEtat();
+      redessinerToutLEcran();
+    });
   }
 }
 
@@ -202,7 +265,7 @@ function dessinerLeTableauDesRessources(analyse) {
     + '<th class="colonne-partagee">×1 <span class="exposant">partagé</span></th>'
     + "<th>×10</th><th>×100</th><th>×1000</th>"
     + "<th>Prix moyen</th>"
-    + '<th>À acheter</th><th class="colonne-chiffre">Coût</th>'
+    + '<th>À acheter</th><th class="colonne-chiffre">Coût</th><th></th>'
     + "</tr></thead><tbody></tbody>";
 
   const corpsDuTableau = tableau.querySelector("tbody");
@@ -217,9 +280,11 @@ function dessinerLeTableauDesRessources(analyse) {
       + construireLesCellulesDesGrosLots(ligne)
       + construireLaCelluleDuPrixMoyen(ligne)
       + "<td>" + decrireLePanier(ligne) + "</td>"
-      + construireLaCelluleDuCout(ligne);
+      + construireLaCelluleDuCout(ligne)
+      + construireLaCelluleDAction(ligne, analyse);
 
     brancherLesSaisiesDePrixDUneRangee(rangee, ligne);
+    brancherLeBoutonDeCraftDUneRangee(rangee);
     corpsDuTableau.appendChild(rangee);
   }
 
@@ -228,6 +293,83 @@ function dessinerLeTableauDesRessources(analyse) {
   marquerLesChampsCommeObsoletes(conteneurRessources);
   conteneurRessources.innerHTML = "";
   conteneurRessources.appendChild(tableau);
+  brancherLaCopieDesNoms(conteneurRessources);
+}
+
+/**
+ * Colonne d'action : crafter cette ressource plutôt que l'acheter.
+ *
+ * LE BOUTON A BESOIN DE SAVOIR POUR QUI IL CRAFTE
+ *
+ * Le tableau est agrégé : une même ressource peut servir trois recettes. Un
+ * sous-craft, lui, se rattache à UN parent — c'est de lui qu'il tient sa
+ * quantité. Quand plusieurs recettes réclament la ressource, le bouton seul ne
+ * peut pas trancher, et un sélecteur dit laquelle servir.
+ *
+ * Le cas courant reste celui d'un seul consommateur, et il ne doit rien coûter :
+ * un menu à une entrée serait une question dont la réponse est évidente.
+ */
+function construireLaCelluleDAction(ligne, analyse) {
+  const recette = lireLaRecetteConnue(ligne.besoin.identifiantAnkama);
+  if (!recette || !recette.craftable) return '<td class="colonne-action"></td>';
+
+  const consommateurs = listerLesCraftsQuiConsomment(ligne.besoin.identifiantAnkama, analyse);
+  if (consommateurs.length === 0) return '<td class="colonne-action"></td>';
+
+  if (consommateurs.length === 1) {
+    return '<td class="colonne-action"><button class="bouton-crafter" data-crafter-ressource="'
+      + ligne.besoin.identifiantAnkama + '" data-pour-le-craft="'
+      + echapperPourHtml(consommateurs[0].craft.identifiantDeLigne)
+      + '" title="Crafter au lieu d\'acheter, pour '
+      + echapperPourHtml(consommateurs[0].craft.nom) + '">Crafter</button></td>';
+  }
+
+  const options = consommateurs.map(noeud =>
+    '<option value="' + echapperPourHtml(noeud.craft.identifiantDeLigne) + '">'
+    + echapperPourHtml(noeud.craft.nom) + "</option>").join("");
+
+  return '<td class="colonne-action"><div class="action-crafter-multiple">'
+    + '<select class="selecteur-taille-lot" data-choix-du-parent="oui"'
+    + ' title="Quelle recette ce craft doit-il servir ?">' + options + "</select>"
+    + '<button class="bouton-crafter" data-crafter-ressource="'
+    + ligne.besoin.identifiantAnkama + '">Crafter</button></div></td>';
+}
+
+/**
+ * Crafts qui consomment cette ressource et ne la produisent pas déjà.
+ *
+ * Le filtre sur ce qui est déjà produit n'est pas de la coquetterie : proposer
+ * « Crafter » pour une recette qui a déjà son atelier mènerait au refus poli de
+ * `crafterUneRessourceSurPlace`, et un bouton qui ne fait que se justifier de
+ * ne rien faire vaut mieux absent.
+ */
+function listerLesCraftsQuiConsomment(identifiantAnkama, analyse) {
+  return analyse.arbre.deLaRacineAuxFeuilles.filter(noeud =>
+    !noeud.ingredientsProduitsSurPlace.has(identifiantAnkama)
+    && noeud.craft.ingredients.some(i => i.identifiantAnkama === identifiantAnkama));
+}
+
+function brancherLeBoutonDeCraftDUneRangee(rangee) {
+  const bouton = rangee.querySelector("[data-crafter-ressource]");
+  if (!bouton) return;
+
+  bouton.addEventListener("click", async () => {
+    const identifiant = parseInt(bouton.getAttribute("data-crafter-ressource"), 10);
+    const selecteurDeParent = rangee.querySelector("[data-choix-du-parent]");
+    const ligneDuParent = selecteurDeParent
+      ? selecteurDeParent.value
+      : bouton.getAttribute("data-pour-le-craft");
+
+    // Même garde que sur la carte : la composition part chez DofusDude, et deux
+    // clics pendant ce délai ajouteraient deux fois le même sous-craft.
+    bouton.disabled = true;
+    annoncer("Ouverture de la recette…", "en-cours");
+
+    const resultat = await crafterUneRessourceSurPlace(identifiant, ligneDuParent);
+    annoncer(resultat.message, resultat.ajoute ? "succes" : "echec");
+    if (!resultat.ajoute) bouton.disabled = false;
+    redessinerToutLEcran();
+  });
 }
 
 function construireLaCelluleDuNom(ligne) {
@@ -245,7 +387,8 @@ function construireLaCelluleDuNom(ligne) {
 
   return '<td class="colonne-nom"><div class="cellule-nom-ressource">'
     + '<img src="' + echapperPourHtml(ligne.besoin.adresseIcone) + '" alt="">'
-    + "<span>" + echapperPourHtml(ligne.besoin.nom)
+    + "<span>" + construireLeNomCopiable(ligne.besoin.nom)
+    + construireLaPastilleDeMetier(ligne.besoin.identifiantAnkama)
     + construireLaPastilleDeProvenance(ligne)
     + construireLaPastilleDeQuarantaine(ligne)
     + construireLaMentionDeDesaccord(ligne)
@@ -255,6 +398,13 @@ function construireLaCelluleDuNom(ligne) {
 
 /** Formulation lisible du panier, par exemple « 2 × 100 + 3 × 10 + 4 × 1 ». */
 function decrireLePanier(ligne) {
+  // Produite par un atelier de la session : rien à acheter, et surtout pas un
+  // « prix à saisir » en jaune, qui ferait croire à une lacune alors que c'est
+  // un choix. Le prix de la ligne reste saisissable pour l'arbitrage.
+  if (ligne.entierementProduiteSurPlace) {
+    return '<span class="marque-produite" title="Fabriquée par un atelier de la session,'
+      + ' donc hors de la liste de courses">craftée sur place</span>';
+  }
   if (!ligne.achatOptimal) return '<span class="prix-manquant">prix à saisir</span>';
 
   if (ligne.achatOptimal.methodeDeCalcul !== "lots") {
@@ -281,10 +431,15 @@ function decrireLePanier(ligne) {
     + (surplus > 0 ? ' <span class="attenue">(+' + surplus + " en trop)</span>" : "") + "</span>";
 }
 
+/**
+ * Cellule de coût. Porte `colonne-cout` en plus de son alignement : depuis la
+ * colonne d'action, elle n'est plus la dernière de la rangée, et la désigner
+ * par sa position serait un piège pour le prochain qui ajoute une colonne.
+ */
 function construireLaCelluleDuCout(ligne) {
-  if (!ligne.achatOptimal) return '<td class="colonne-chiffre attenue">–</td>';
+  if (!ligne.achatOptimal) return '<td class="colonne-cout colonne-chiffre attenue">–</td>';
   const estimee = ligne.achatOptimal.methodeDeCalcul !== "lots";
-  return '<td class="colonne-chiffre' + (estimee ? " attenue" : "") + '">'
+  return '<td class="colonne-cout colonne-chiffre' + (estimee ? " attenue" : "") + '">'
     + formaterMontantEnKamas(ligne.achatOptimal.coutTotal) + "</td>";
 }
 

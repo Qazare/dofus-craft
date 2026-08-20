@@ -160,8 +160,10 @@ verifier("la Laine, sans relevé, n'a aucune marque de provenance",
   await rangeeDeLaLaine.locator('[data-taille-de-lot="1"]').getAttribute("class"),
   "champ-prix-lot");
 
+// La cellule de coût se désigne par sa classe et non par `last()` : depuis la
+// colonne d'action des sous-crafts, elle n'est plus la dernière de la rangée.
 verifier("le coût de la Corne repose sur la base, 3 à 250",
-  (await rangeeDeLaCorne.locator("td").last().textContent()).replace(/\s/g, ""), "750k");
+  (await rangeeDeLaCorne.locator("td.colonne-cout").textContent()).replace(/\s/g, ""), "750k");
 
 // --- Publication ---
 console.log("\n--- Publication du ×1 ---");
@@ -240,7 +242,10 @@ await page.waitForTimeout(400);
 const champEnCoursDeSaisie = page.locator(".tableau-ressources tbody tr", { hasText: "Laine" })
   .locator('[data-taille-de-lot="1"]');
 await champEnCoursDeSaisie.click();
-await page.keyboard.press("Control+a");
+// `ControlOrMeta` et non `Control` : sur macOS, Ctrl+A place le curseur en
+// début de ligne au lieu de tout sélectionner, et la frappe se retrouvait
+// insérée devant la valeur existante plutôt qu'à sa place.
+await page.keyboard.press("ControlOrMeta+a");
 await page.keyboard.type("15");
 verifier("la saisie est bien à moitié tapée",
   await champEnCoursDeSaisie.inputValue(), "15");

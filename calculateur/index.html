@@ -10,6 +10,8 @@
 </head>
 <body>
 
+<main class="conteneur-principal">
+
 <div class="entete-application">
   <h1>Calculateur de craft</h1>
   <div class="groupe-boutons">
@@ -67,6 +69,31 @@
   Le <strong>prix moyen</strong> se saisit comme le HDV l'affiche, le montant du lot entier, avec la
   taille du lot juste à côté ; l'unitaire est déduit, jamais saisi, et rappelé en info-bulle.</p>
 
+  <p><strong>Crafter la chaîne, pas seulement l'objet.</strong> Chaque ingrédient qui a lui-même
+  une recette porte un bouton <em>Crafter</em>, dans la carte de la recette comme dans le tableau
+  des ressources. Un clic, et il n'est plus acheté mais fabriqué : une carte en retrait apparaît
+  sous celle qu'elle sert, avec ses propres ingrédients, et c'est eux qui entrent dans la liste
+  de courses. Sa <em>quantité est déduite</em>, jamais saisie — trois Substrats qui demandent
+  chacun une Planche, ce sont trois Planches, et rien ne permet d'en chiffrer deux. Le coût
+  remonte la chaîne jusqu'à la tête, qui est la seule à porter un prix de vente : un maillon
+  intermédiaire ne se vend pas, il se consomme. Sur chaque sous-craft, l'écart entre son coût de
+  fabrication et son prix au HDV est affiché — c'est l'arbitrage <em>le crafter ou l'acheter</em>.
+  <em>Acheter plutôt</em> défait le maillon et le remet dans le panier. Une ressource déjà produite
+  plus haut dans la même branche est refusée : c'est ce qui empêche une chaîne sans fin.</p>
+
+  <p><strong>Le métier et son niveau</strong> s'affichent à côté de chaque objet craftable, ici
+  comme dans le tableau. C'est ce qui dit qu'une chaîne passe du bûcheron à l'alchimiste et
+  revient, donc si elle est faisable aujourd'hui. C'est aussi ce qui dit quelles ressources
+  méritent un bouton <em>Crafter</em>. Ce renseignement ne vient d'aucune API — aucune de celles
+  qui sont joignables ne le porte — mais d'un fichier livré avec le site, extrait des données de
+  jeu publiées par Datafus. Il est donc complet dès l'ouverture et fonctionne hors ligne. Source
+  d'agrément seulement : s'il manquait, les pastilles et les boutons disparaîtraient et tous les
+  calculs resteraient exacts.</p>
+
+  <p><strong>Cliquer un nom le copie.</strong> N'importe quel nom d'objet, dans les cartes, dans
+  le tableau ou dans la fenêtre flottante. Il part tel quel dans la barre de recherche du HDV, où
+  une faute d'accent ne renvoie rien. Le nom seul est copié, sans les pastilles qui l'entourent.</p>
+
   <p><strong>Trois destinations par craft.</strong> <em>Pour mes persos</em> : aucun revenu, le
   coût est compté à part et jamais dans le résultat de session — un objet gardé n'est pas une perte.
   <em>Revente à l'unité</em> : l'équipement, que le HDV liste pièce par pièce puisque ses jets de
@@ -92,10 +119,13 @@
   L'XP par craft dépend de ton niveau de métier : mémorisée par recette, à corriger après une montée.</p>
 
   <p class="attenue">Recettes : <a href="https://api.dofusdu.de" target="_blank" rel="noopener">DofusDude</a>.
+  Métiers : <a href="https://github.com/bot4dofus/Datafus" target="_blank" rel="noopener">Datafus</a>, en MIT.
   Prix : <a href="https://dofus-calculator.fr" target="_blank" rel="noopener">dofus-calculator.fr</a>,
   serveur Brial. Ton jeton d'écriture reste dans ce navigateur et n'est jamais envoyé ailleurs
   qu'à dofus-calculator.</p>
 </div>
+
+</main>
 
 <script type="module" src="js/application.js"></script>
 </body>

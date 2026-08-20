@@ -17,6 +17,8 @@
  */
 import { analyserLaSessionComplete } from "./analyse.js";
 import { formaterMontantEnKamas, formaterNombreSimple, echapperPourHtml } from "./formats.js";
+import { construireLeNomCopiable } from "./cartes-de-craft.js";
+import { brancherLaCopieDesNoms } from "./presse-papier.js";
 import { construireLaCelluleDuPrixUnitaire, construireLesCellulesDesGrosLots,
          construireLaPastilleDeProvenance, construireLaPastilleDeQuarantaine } from "./cellules-de-prix.js";
 import { brancherLesSaisiesDePrixDUneRangee, enregistrerLeRedessinSecondaire,
@@ -156,11 +158,17 @@ export function dessinerLaVueCompacte() {
     rangee.innerHTML =
       '<td class="colonne-nom"><div class="cellule-nom-ressource">'
         + '<img src="' + echapperPourHtml(ligne.besoin.adresseIcone) + '" alt="">'
-        + "<span>" + echapperPourHtml(ligne.besoin.nom)
+        + "<span>" + construireLeNomCopiable(ligne.besoin.nom)
         + construireLaPastilleDeProvenance(ligne)
         + construireLaPastilleDeQuarantaine(ligne) + "</span></div></td>"
+      // La quantité annoncée est celle À ACHETER, pas celle consommée. C'est
+      // cette fenêtre-là qui est ouverte devant le HDV, la main sur les achats :
+      // y afficher un besoin dont une partie sort d'un atelier ferait acheter
+      // ce que la session produit déjà.
       + '<td class="colonne-chiffre">'
-        + formaterNombreSimple(ligne.besoin.quantiteTotaleNecessaire) + "</td>"
+        + (ligne.entierementProduiteSurPlace
+            ? '<span class="marque-produite" title="Craftée sur place">craftée</span>'
+            : formaterNombreSimple(ligne.besoin.quantiteAAcheter)) + "</td>"
       + construireLaCelluleDuPrixUnitaire(ligne)
       + construireLesCellulesDesGrosLots(ligne)
       + '<td class="colonne-chiffre">'
@@ -177,6 +185,9 @@ export function dessinerLaVueCompacte() {
   marquerLesChampsCommeObsoletes(conteneur);
   conteneur.innerHTML = "";
   conteneur.appendChild(tableau);
+  // Copier un nom depuis la fenêtre posée devant le jeu est même son usage le
+  // plus direct : le nom part droit dans la barre de recherche du HDV.
+  brancherLaCopieDesNoms(conteneur);
 }
 
 function mettreAJourLIntituleDuBouton() {

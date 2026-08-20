@@ -30,6 +30,14 @@ import {
  *     taille de lot. Apparition aussi de `prixOcrEnAttente`, la quarantaine des
  *     prix lus par OCR, rangée à part de `basePrixDesRessources` exactement
  *     comme `prixCommunautairesParRessource` l'est déjà.
+ * 6 : un craft peut en nourrir un autre. Il porte `identifiantDuCraftParent`,
+ *     qui vaut null pour un craft de tête et l'identifiant de ligne du craft
+ *     servi pour un sous-craft.
+ *
+ *     Rien n'est ajouté ici pour les métiers : la table qui les porte est un
+ *     fichier servi avec le site, complet et identique pour tout le monde. La
+ *     recopier dans l'état sauvegardé alourdirait chaque écriture du stockage
+ *     local de soixante-dix kilo-octets qui ne sont propres à personne.
  *
  * Toute évolution du format incrémente ce numéro et ajoute son étape dans
  * `migrerLEtatVersLeSchemaCourant`.
@@ -209,6 +217,18 @@ export function migrerLEtatVersLeSchemaCourant() {
     console.info("Schéma 4 vers 5 : les crafts existants passent en revente à l'unité.");
   }
 
+  // --- 5 vers 6 : la chaîne de crafts ---
+  //
+  // Tous les crafts existants deviennent des crafts de tête, ce qu'ils étaient
+  // déjà faute d'alternative. Aucun chiffre ne bouge : un craft sans parent et
+  // sans enfant se calcule exactement comme avant.
+  if (versionDeLEtatCharge < 6) {
+    for (const craft of etatApplication.craftsDeLaSession || []) {
+      if (craft.identifiantDuCraftParent === undefined) craft.identifiantDuCraftParent = null;
+    }
+    console.info("Schéma 5 vers 6 : les crafts existants deviennent des crafts de tête.");
+  }
+
   etatApplication.versionDuSchema = VERSION_COURANTE_DU_SCHEMA;
   sauvegarderEtat();
 }
@@ -220,6 +240,10 @@ export function migrerLEtatVersLeSchemaCourant() {
  */
 export function normaliserUnCraft(craft) {
   if (!craft.destination) craft.destination = DESTINATION_PAR_DEFAUT;
+  // Champ du schéma 6. `undefined` et `null` disent la même chose ici, mais
+  // seul `null` survit à un aller-retour JSON : un craft de tête resterait
+  // sinon indistinguable d'un craft dont le parent a été perdu.
+  if (craft.identifiantDuCraftParent === undefined) craft.identifiantDuCraftParent = null;
   if (!craft.prixDeVenteParTailleDeLot) {
     craft.prixDeVenteParTailleDeLot = {};
     if (craft.prixDeVenteUnitaire > 0) {

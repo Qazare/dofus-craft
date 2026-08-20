@@ -27,6 +27,7 @@ import {
   DESTINATION_VENTE_PAR_LOT, DESTINATION_PAR_DEFAUT, INTITULES_DES_DESTINATIONS
 } from "./config.js";
 import { formaterMontantEnKamas, formaterNombreSimple } from "./formats.js";
+import { construireLArbitrageCraftOuAchat } from "./cartes-de-craft.js";
 
 export function lireLaDestination(craft) {
   return craft.destination || DESTINATION_PAR_DEFAUT;
@@ -83,6 +84,20 @@ export function construireLesChampsDeVente(craft) {
  * cas du lot « comment j'écoule tout ça ».
  */
 export function construireLaLigneDeBilan(craft, bilan) {
+  // Un sous-craft n'a ni destination ni revenu : il est consommé par son
+  // parent. Les deux seuls chiffres qui le concernent sont ce qu'il coûte et
+  // ce qu'il coûterait de l'acheter tout fait — l'arbitrage de la chaîne.
+  if (bilan.estUnSousCraft) {
+    return '<div class="bilan-ligne">'
+      + "<span>Coût par objet <strong>" + formaterMontantEnKamas(bilan.coutParObjet) + "</strong></span>"
+      + "<span>Coût de la branche <strong>"
+        + formaterMontantEnKamas(bilan.coutDesRessources) + "</strong></span>"
+      + construireLArbitrageCraftOuAchat(bilan)
+      + (bilan.auMoinsUnPrixManquant
+          ? '<span class="prix-manquant">prix de ressource manquant</span>' : "")
+      + "</div>";
+  }
+
   const destination = lireLaDestination(craft);
 
   if (destination === DESTINATION_USAGE_PERSONNEL) {

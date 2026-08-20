@@ -15,6 +15,14 @@
    La bordure d'un champ porte la provenance, le fond de la cellule porte la
    recommandation d'achat. Deux canaux distincts, jamais superposés : une
    bordure ne peut pas dire deux choses à la fois.
+
+   LARGEUR
+
+   L'interface est en colonne unique et bornée en largeur. Sur un écran 4K, une
+   page qui s'étire de bord à bord rend un tableau illisible : l'œil perd la
+   ligne entre le nom d'une ressource et son coût, et le trajet de la souris
+   devient absurde. La borne est posée sur un conteneur, pas sur le body, pour
+   que le fond continue de couvrir tout l'écran.
    ============================================================ */
 
 :root {
@@ -45,8 +53,18 @@
 
 * { box-sizing: border-box; }
 
+/* ---- Conteneur de page ----
+   `ch` plutôt que `px` : la borne suit la taille du texte, ce qui reste juste
+   si Brice grossit la police du navigateur. Environ 1 320 px au réglage par
+   défaut, de quoi tenir les neuf colonnes du tableau sans les étirer. ---- */
+.conteneur-principal {
+  max-width: 150ch;
+  margin: 0 auto;
+  padding: 0 16px 60px;
+}
+
 body {
-  margin: 0; padding: 0 16px 60px;
+  margin: 0; padding: 0;
   background: var(--fond-page); color: var(--texte);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 14px; line-height: 1.5;
@@ -330,3 +348,134 @@ input::placeholder { color: #4c574f; }
   font-size: 11px; color: var(--texte-attenue); max-width: 900px;
 }
 .note-bas-de-page p { margin: 0 0 10px; }
+
+
+/* ============================================================
+   CHAÎNE DE CRAFTS
+
+   Ce qu'il faut faire comprendre sans une ligne d'explication : les ressources
+   A et B servent à fabriquer X, et X sert à fabriquer Y. Trois signaux qui se
+   renforcent, plutôt qu'un seul qui porterait tout :
+
+     le décalage    un sous-craft est enfoncé d'un cran par étage
+     le liseré      une barre verticale à gauche, du même vert que l'accent,
+                    qui matérialise le lien avec la carte du dessus
+     le mot         « sous-craft », « craftée », « quantité déduite » — parce
+                    qu'une nuance de couleur seule ne se lit pas de façon sûre,
+                    et qu'un décalage sans mot laisse deviner
+   ============================================================ */
+
+/* Le décalage est un padding sur un conteneur, pas une marge : la barre de
+   liaison doit courir sur toute la hauteur de la carte, y compris au droit du
+   décalage, sinon elle flotte sans rattacher quoi que ce soit. */
+.carte-sous-craft {
+  margin-left: calc(var(--profondeur, 1) * 26px);
+  border-left: 2px solid var(--accent);
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+  background: linear-gradient(90deg, rgba(182, 227, 74, .05), transparent 180px), var(--fond-carte);
+}
+
+/* La flèche de rattachement, posée dans la gouttière laissée par le décalage.
+   Purement décorative, donc en pseudo-élément : rien à lire pour un lecteur
+   d'écran, qui a déjà le mot « sous-craft » dans l'en-tête. */
+.carte-sous-craft { position: relative; }
+.carte-sous-craft::before {
+  content: "";
+  position: absolute; left: -16px; top: 22px;
+  width: 12px; height: 2px; background: var(--accent); opacity: .5;
+}
+
+.marque-sous-craft {
+  font-size: 9px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px;
+}
+
+/* Quantité déduite d'un sous-craft. Volontairement dessinée comme un champ
+   sans en être un : même gabarit, même alignement, mais sans bordure vive ni
+   curseur de saisie. Un champ grisé inviterait à cliquer dedans. */
+.valeur-deduite {
+  padding: 6px 9px; border: 1px dashed var(--bordure); border-radius: 7px;
+  background: rgba(255, 255, 255, .02); color: var(--texte-attenue);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Pastille de métier ----
+   Le même bleu que la provenance communautaire serait une confusion : ici la
+   couleur ne dit rien de l'origine d'un prix. Teinte propre, neutre. ---- */
+.pastille-metier {
+  color: #9fb0a4; border-style: solid; cursor: help;
+  background: rgba(159, 176, 164, .08);
+}
+
+/* ---- Liste des ingrédients d'une recette ----
+   C'est ici que la hiérarchie se lit recette par recette. Le tableau du bas
+   reste la liste de courses agrégée, qui ne peut pas la montrer : il a fondu
+   toutes les recettes ensemble, c'est son travail. ---- */
+.liste-ingredients {
+  list-style: none; margin: 10px 0 0; padding: 8px 0 0;
+  border-top: 1px dashed var(--bordure);
+}
+.ligne-ingredient {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 0; font-size: 12px;
+}
+.ligne-ingredient img { width: 22px; height: 22px; flex: none; }
+.quantite-ingredient {
+  min-width: 44px; text-align: right; font-variant-numeric: tabular-nums;
+  color: var(--texte-attenue); flex: none;
+}
+.nom-ingredient { flex: 1; min-width: 0; }
+.cout-ingredient {
+  font-variant-numeric: tabular-nums; color: var(--texte-attenue);
+  white-space: nowrap; flex: none;
+}
+
+/* Un ingrédient produit sur place reste affiché, en retrait. Le retirer de la
+   liste donnerait l'impression d'une recette modifiée, alors que seule sa
+   provenance a changé. */
+.ligne-ingredient.ingredient-produit { opacity: .62; }
+.marque-produite {
+  font-size: 9px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid currentColor; border-radius: 4px;
+  padding: 0 4px; white-space: nowrap;
+}
+
+.bouton-crafter {
+  flex: none; padding: 2px 9px; font-size: 11px;
+  color: var(--accent); background: rgba(182, 227, 74, .08);
+  border: 1px solid rgba(182, 227, 74, .45); border-radius: 6px;
+}
+.bouton-crafter:hover:not(:disabled) { color: var(--fond-page); background: var(--accent); }
+.bouton-crafter:disabled { opacity: .45; cursor: progress; }
+
+/* Ressource réclamée par plusieurs recettes : le sélecteur dit laquelle servir.
+   Sans lui, le bouton ne saurait pas de qui le sous-craft tient sa quantité. */
+.action-crafter-multiple { display: flex; gap: 4px; align-items: center; }
+.action-crafter-multiple select { max-width: 130px; }
+
+/* ============================================================
+   NOM COPIABLE
+
+   Le nom part dans la barre de recherche du HDV, où une faute de frappe ne
+   renvoie rien. Le soulignement pointillé est le seul indice d'interactivité
+   qui ne se confonde avec rien d'autre sur cette page — un lien est bleu, un
+   bouton a une bordure pleine.
+   ============================================================ */
+.nom-copiable {
+  cursor: pointer; border-radius: 3px;
+  text-decoration: underline dotted rgba(223, 230, 223, .28);
+  text-underline-offset: 3px;
+}
+.nom-copiable:hover { text-decoration-color: var(--accent); color: var(--accent); }
+.nom-copiable:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+
+/* La confirmation. Sans elle, rien ne distingue une copie réussie d'un clic
+   qui n'a rien fait, et le réflexe est de recliquer. */
+.nom-copiable.copie {
+  color: var(--fond-page); background: var(--accent);
+  text-decoration: none; padding: 0 3px;
+}
+.nom-copiable.copie::after { content: " copié"; font-size: 10px; }
+.nom-copiable.copie-en-echec { color: var(--perte); text-decoration-color: var(--perte); }
+.nom-copiable.copie-en-echec::after { content: " copie refusée"; font-size: 10px; }

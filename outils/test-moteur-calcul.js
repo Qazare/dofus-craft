@@ -21,6 +21,8 @@ import { determinerLePrixUnitaire, construireLesPrixDeLotEffectifs, laBaseEstEnD
   from "../calculateur/js/prix-communautaires.js";
 import { analyserLaSessionComplete, listerLesIdentifiantsDesRessourcesDeLaSession }
   from "../calculateur/js/analyse.js";
+import { construireLArbreDesCrafts, listerLesObjetsDeLaBranche }
+  from "../calculateur/js/arbre-de-crafts.js";
 import { VERSION_COURANTE_DU_SCHEMA } from "../calculateur/js/config.js";
 
 let nombreDEchecs = 0;
@@ -177,8 +179,11 @@ verifier("aucune ressource sans prix", analyse.nombreDeRessourcesSansPrix, 0);
 verifier("revenu brut", analyse.revenuBrutTotal, 20000);
 verifier("taxe de 2 %", analyse.taxeTotale, 400);
 verifier("résultat de la session", analyse.profitTotalDeLaSession, 18500);
+// L'objet crafté figure dans la liste au même titre que ses ingrédients : son
+// prix de HDV est ce qui permet de trancher entre le crafter et l'acheter, une
+// question qui se pose à chaque maillon d'une chaîne de sous-crafts.
 verifier("identifiants listés pour la synchronisation",
-  listerLesIdentifiantsDesRessourcesDeLaSession(), [289, 290]);
+  listerLesIdentifiantsDesRessourcesDeLaSession(), [1234, 289, 290]);
 
 console.log("\n--- Migrations de schéma ---");
 
@@ -348,6 +353,109 @@ const collageDouteux = analyserUnCollageOcr(
   "#DOFUS-HDV/1\tbrial\t2026-08-18T14:22:11\n289\tBlé\t125\t12000\t\t\t\t\t1");
 verifier("une ligne incohérente est marquée, pas rejetée",
   [collageDouteux.lignes.length, collageDouteux.lignes[0].confianceBasse], [1, true]);
+
+
+console.log("\n--- Chaîne de sous-crafts ---");
+
+/*
+ * La session de l'exemple, celle qui a motivé toute la chaîne :
+ *
+ *   3 Substrats de Futaie, revendus à l'unité 5 000 pièce
+ *     ├─ 1 Planche de Surf par substrat, craftée sur place
+ *     │    └─ 10 Bois par planche, achetés 100 l'unité
+ *     └─ 1 Potion de Souvenir par substrat, achetée 800 l'unité
+ *
+ * Les chiffres attendus, à la main :
+ *   Bois        3 planches × 10 = 30 unités à 100 = 3 000
+ *   Potions     3 unités à 800 = 2 400
+ *   Coût total  5 400, et le Bois est la seule ligne du panier avec la Potion
+ *   Revenu      3 × 5 000 = 15 000, taxe 2 % = 300
+ *   Résultat    15 000 - 300 - 5 400 = 9 300
+ */
+const SESSION_EN_CHAINE = {
+  versionDuSchema: VERSION_COURANTE_DU_SCHEMA,
+  tauxDeTaxeEnPourcent: 2,
+  craftsDeLaSession: [
+    {
+      identifiantDeLigne: "substrat", identifiantAnkama: 2540, nom: "Substrat de Futaie",
+      niveau: 60, quantiteACrafter: 3, identifiantDuCraftParent: null,
+      destination: DESTINATION_VENTE_UNITAIRE, prixDeVenteUnitaire: 5000,
+      ingredients: [
+        { identifiantAnkama: 16492, nom: "Planche de Surf", quantiteParCraft: 1 },
+        { identifiantAnkama: 7652, nom: "Potion de Souvenir", quantiteParCraft: 1 }
+      ]
+    },
+    {
+      identifiantDeLigne: "planche", identifiantAnkama: 16492, nom: "Planche de Surf",
+      niveau: 60, quantiteACrafter: 1, identifiantDuCraftParent: "substrat",
+      destination: DESTINATION_VENTE_UNITAIRE, prixDeVenteUnitaire: 0,
+      ingredients: [{ identifiantAnkama: 460, nom: "Bois", quantiteParCraft: 10 }]
+    }
+  ],
+  basePrixDesRessources: {
+    460: { prixParTailleDeLot: { 1: 100 } },
+    7652: { prixParTailleDeLot: { 1: 800 } },
+    // La Planche a un prix de HDV, et c'est volontaire : elle est craftée sur
+    // place, donc ce prix ne doit RIEN coûter à la session. Il ne sert qu'à
+    // l'arbitrage « la crafter ou l'acheter ».
+    16492: { prixParTailleDeLot: { 1: 9999 } }
+  }
+};
+
+remplacerLEtat(JSON.parse(JSON.stringify(SESSION_EN_CHAINE)));
+const chaine = analyserLaSessionComplete();
+
+const ligneDuBois = chaine.lignesDeRessources.find(l => l.besoin.identifiantAnkama === 460);
+const ligneDeLaPlanche = chaine.lignesDeRessources.find(l => l.besoin.identifiantAnkama === 16492);
+
+verifier("la quantité du sous-craft est déduite du parent",
+  chaine.bilansParCraft.find(b => b.identifiantDeLigne === "planche").quantiteEffective, 3);
+verifier("le besoin en bois suit la chaîne", ligneDuBois.besoin.quantiteTotaleNecessaire, 30);
+verifier("la planche est produite sur place", ligneDeLaPlanche.entierementProduiteSurPlace, true);
+verifier("donc elle n'a aucun panier d'achat", ligneDeLaPlanche.achatOptimal, null);
+verifier("et son prix de HDV n'entre dans aucun total", chaine.coutTotalDesRessources, 5400);
+verifier("une ressource produite ne compte pas comme prix manquant",
+  chaine.nombreDeRessourcesSansPrix, 0);
+
+const bilanDuSubstrat = chaine.bilansParCraft.find(b => b.identifiantDeLigne === "substrat");
+verifier("le coût du parent absorbe celui de la branche", bilanDuSubstrat.coutDesRessources, 5400);
+verifier("coût par substrat", bilanDuSubstrat.coutParObjet, 1800);
+verifier("le sous-craft ne rapporte rien",
+  chaine.bilansParCraft.find(b => b.identifiantDeLigne === "planche").revenuBrut, 0);
+verifier("son coût n'est pas compté deux fois dans la session",
+  chaine.profitTotalDeLaSession, 9300);
+verifier("le prix de marché du sous-craft est rapporté, pour l'arbitrage",
+  chaine.bilansParCraft.find(b => b.identifiantDeLigne === "planche").prixUnitaireAuMarche, 9999);
+
+// Un prix manquant à la feuille doit remonter jusqu'à la tête : sans lui, le
+// coût du substrat est sous-estimé tout autant que celui de la planche.
+const sessionSansPrixDeBois = JSON.parse(JSON.stringify(SESSION_EN_CHAINE));
+delete sessionSansPrixDeBois.basePrixDesRessources[460];
+remplacerLEtat(sessionSansPrixDeBois);
+const chaineTrouee = analyserLaSessionComplete();
+verifier("un prix manquant chez l'enfant remonte au parent",
+  chaineTrouee.bilansParCraft.find(b => b.identifiantDeLigne === "substrat").auMoinsUnPrixManquant,
+  true);
+
+console.log("\n--- Structure de l'arbre ---");
+
+const arbre = construireLArbreDesCrafts(SESSION_EN_CHAINE.craftsDeLaSession);
+verifier("un seul craft de tête", arbre.racines.length, 1);
+verifier("le parent précède l'enfant dans l'ordre de parcours",
+  arbre.deLaRacineAuxFeuilles.map(n => n.craft.identifiantDeLigne), ["substrat", "planche"]);
+verifier("la branche remonte jusqu'à la tête",
+  listerLesObjetsDeLaBranche(arbre.noeudsParLigne.get("planche")), [16492, 2540]);
+
+// Un état importé tronqué peut désigner un parent absent. La branche doit
+// rester visible à la racine plutôt que de disparaître de l'écran.
+const arbreOrphelin = construireLArbreDesCrafts([
+  { identifiantDeLigne: "orphelin", identifiantAnkama: 1, quantiteACrafter: 2,
+    identifiantDuCraftParent: "parti-en-fumee", ingredients: [] }
+]);
+verifier("un craft dont le parent a disparu remonte à la racine",
+  arbreOrphelin.racines.length, 1);
+verifier("et sa quantité saisie est reprise",
+  arbreOrphelin.racines[0].quantiteEffective, 2);
 
 console.log("\n" + (nombreDEchecs === 0
   ? "Tous les tests passent."

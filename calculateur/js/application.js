@@ -6,7 +6,7 @@ import { installerLeJournal } from "./journal.js";
 import { installerLaVue, redessinerToutLEcran } from "./vue.js";
 import { installerLaRecherche } from "./recherche.js";
 import { installerLaFenetreFlottante } from "./fenetre-flottante.js";
-import { synchroniserLesPrixDeLaSession } from "./crafts.js";
+import { synchroniserLesPrixDeLaSession, synchroniserLesRecettesDeLaSession } from "./crafts.js";
 import { ouvrirLaRevue } from "./revue.js";
 import { ouvrirLesReglages } from "./reglages.js";
 import { analyserUnCollageOcr } from "./ingestion-ocr.js";
@@ -112,3 +112,8 @@ element("champRechercheRecette").focus();
 // immédiatement sur le cache, et les chiffres se mettent à jour quand la réponse
 // arrive. Hors ligne, rien ne casse.
 synchroniserLesPrixDeLaSession();
+
+// Métiers et recettes, même principe et même indifférence à l'échec. Le cache
+// étant gardé d'une session à l'autre, une session déjà ouverte hier n'émet
+// aucune requête ici : les pastilles sont là avant même que le réseau réponde.
+synchroniserLesRecettesDeLaSession();
