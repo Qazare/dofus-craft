@@ -235,9 +235,23 @@ export function construireLaLigneDXP(craft, bilanDXP, niveauViseChoisi) {
       + selecteur + "</div>";
   }
 
+  // Quand le relevé date d'un autre niveau, le chiffre affiché est PROJETÉ par
+  // la régression, pas observé. La nuance compte : la courbe de niveau est
+  // exacte, le coefficient de régression ne l'est pas encore, et un relevé frais
+  // vaut mieux qu'une longue projection. Le dire invite à en refaire un.
+  const ecartDObservation = Math.abs(
+    (bilanDXP.observation.niveauMetierObserve || situation.niveau) - situation.niveau);
+  const mentionDeProjection = ecartDObservation > 0
+    ? ' <span class="attenue" title="Ton relevé date du niveau '
+      + bilanDXP.observation.niveauMetierObserve
+      + '. Ce chiffre est projeté par la régression ; refais un relevé pour le'
+      + ' caler exactement.">(projeté depuis le niveau '
+      + bilanDXP.observation.niveauMetierObserve + ")</span>"
+    : "";
+
   const resume = "<span>" + echapperPourHtml(recette.metier) + " "
     + situation.niveau + " · <strong>" + formaterNombreSimple(xpParCraftMaintenant)
-    + "</strong> XP par craft</span>";
+    + "</strong> XP par craft" + mentionDeProjection + "</span>";
 
   if (xpParCraftMaintenant <= 0) {
     return '<div class="ligne-xp">' + resume

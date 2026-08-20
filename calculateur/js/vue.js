@@ -22,8 +22,7 @@ import { construireLEnteteDeCraft, construireLaListeDesIngredients,
          construireLArbitrageCraftOuAchat, construireLeNomCopiable,
          construireLaPastilleDeMetier, construireLeCalibrageDXP,
          construireLaLigneDXP } from "./cartes-de-craft.js";
-import { chiffrerLXPDUnCraft, listerLesMetiersDeLaSession,
-         leNiveauEstInterpole } from "./xp-session.js";
+import { chiffrerLXPDUnCraft, listerLesMetiersDeLaSession } from "./xp-session.js";
 import { crafterUneRessourceSurPlace, retirerUnCraftEtSaDescendance } from "./crafts.js";
 import { lireLaRecetteConnue } from "./metiers.js";
 import { brancherLaCopieDesNoms } from "./presse-papier.js";
@@ -142,14 +141,6 @@ function dessinerLesMetiers() {
     const carte = document.createElement("div");
     carte.className = "carte-metier";
 
-    // Le seuil interpolé est signalé : la table le donne pour les niveaux
-    // impairs, où le redécoupage d'Ankama n'est pas connu. Mieux vaut le dire
-    // que de présenter comme sûr un chiffre qui ne l'est pas.
-    const reserve = leNiveauEstInterpole(metier.niveau)
-      ? ' <span class="pastille pastille-approximatif" title="Le seuil de ce niveau'
-        + ' est interpolé, pas relevé. Le niveau voisin est sûr.">approx.</span>'
-      : "";
-
     const progression = metier.estAuNiveauMaximal
       ? '<span class="attenue">niveau maximal atteint</span>'
       : '<span class="attenue">' + formaterNombreSimple(metier.xpRestantePourLeNiveau)
@@ -157,7 +148,7 @@ function dessinerLesMetiers() {
 
     carte.innerHTML =
       '<div class="entete-metier"><strong>' + echapperPourHtml(metier.nom) + "</strong>"
-        + '<span class="niveau-metier">niveau ' + metier.niveau + "</span>" + reserve + "</div>"
+        + '<span class="niveau-metier">niveau ' + metier.niveau + "</span></div>"
       + '<div class="champ-etiquete"><label class="etiquette" title="L\'XP totale du métier,'
         + ' telle que le jeu l\'affiche">XP cumulée</label>'
         + '<input data-xp-metier="' + metier.identifiantDuMetier + '" value="'

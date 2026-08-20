@@ -46,18 +46,6 @@ export const NOMBRE_DE_SUGGESTIONS_PAR_FAMILLE = 6;
 export const ADRESSE_DES_METIERS_PAR_RECETTE = "donnees/metiers-par-recette.json";
 
 /**
- * Table d'XP par niveau de métier, fabriquée par `outils/extraire-la-table-dxp.js`.
- *
- * Dérivée et non relevée : le client de Dofus reçoit ses seuils du serveur, et
- * aucune API ne les expose. Les niveaux PAIRS viennent de la table officielle
- * 1-100, recoupée par deux sources ; les IMPAIRS sont interpolés, le devblog
- * d'Ankama disant seulement que 200 niveaux ont remplacé 100 sans coûter plus
- * d'expérience. Le fichier porte le drapeau de ce qui est interpolé, et
- * l'interface le dit là où ça compte.
- */
-export const ADRESSE_DE_LA_TABLE_DXP = "donnees/xp-par-niveau-de-metier.json";
-
-/**
  * Objectifs proposés sur une carte de craft.
  *
  * `null` vaut « le prochain niveau », qui n'est pas un nombre fixe puisqu'il

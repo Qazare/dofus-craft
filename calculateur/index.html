@@ -139,24 +139,28 @@
   <p>Le coût de chaque objet est une quote-part du coût groupé des ressources, au prorata des
   quantités, puisque acheter en lot pour plusieurs recettes coûte moins cher que recette par recette.</p>
 
-  <p><strong>L'XP de métier, et pourquoi un seul relevé suffit.</strong> Une recette rapporte
-  <em>xpDeBase × (1 − (niveauDeMétier − niveauDeRecette) / 100)</em> : un point de pourcentage
-  perdu par niveau d'écart, jusqu'à ne plus rien rapporter cent niveaux au-dessus de la recette.
-  Personne ne publie l'XP de base d'une recette, alors on la <em>déduit</em> : tu relèves une fois
-  l'XP qu'un craft t'a donnée <em>en disant à quel niveau tu l'as vue</em>, et la formule remonte à
-  la base. Tout le reste s'en déduit, à n'importe quel niveau. Choisis ensuite un objectif —
-  <em>+1 niveau</em>, <em>niveau 60</em>, <em>niveau 140</em> — et le compte de crafts se fait
-  palier par palier, en recalculant l'XP à chaque niveau gagné : diviser l'XP restante par l'XP
-  d'un craft donnerait toujours une réponse trop optimiste. L'info-bulle montre le détail, et la
-  ligne annonce le niveau où la recette s'éteint, celui où il faudra en changer.</p>
+  <p><strong>L'XP de métier, et pourquoi un seul relevé suffit.</strong> L'XP de base d'une
+  recette ne se déduit d'aucune formule : l'Essence de Batofu et la Potion de Soin sont toutes
+  deux de niveau 40, chez l'Alchimiste, et rapportent 160 et 40 XP. Ni le niveau ni le nombre de
+  cases ne la prédisent. Alors on la mesure : tu relèves une fois l'XP qu'un craft t'a donnée
+  <em>en disant à quel niveau tu l'as vue</em>, et c'est réglé pour cette recette. Choisis ensuite
+  un objectif — <em>+1 niveau</em>, <em>niveau 60</em>, <em>niveau 140</em> — et le compte de
+  crafts se fait palier par palier, en recalculant l'XP à chaque niveau gagné : diviser l'XP
+  restante par l'XP d'un craft donnerait toujours une réponse trop optimiste. L'info-bulle montre
+  le détail, et la ligne annonce le niveau où la recette s'éteint.</p>
 
-  <p><strong>Ton XP se saisit en cumulé, pas en niveau.</strong> Un niveau ne dit pas où tu en es
-  dans le palier, et c'est justement ce reste qui décide du nombre de crafts. Le niveau s'affiche
-  à côté, déduit — ce qui en fait aussi ta vérification : s'il ne correspond pas à ton jeu, c'est
-  la table d'XP qui est à corriger. Elle est <em>dérivée</em> et non relevée : le client de Dofus
-  reçoit ses seuils du serveur et aucune API ne les publie. Elle vient de la table officielle
-  1-100, recoupée par deux sources, redécoupée en 200 niveaux d'après le devblog d'Ankama sur la
-  refonte des métiers. Les seuils interpolés portent la mention <em>approx.</em></p>
+  <p><strong>La courbe des niveaux, elle, est exacte.</strong> Un palier coûte <em>20 × niveau</em>,
+  donc atteindre le niveau L demande <em>10 × L × (L−1)</em> XP en tout — 16 400 pour le niveau 41,
+  398 000 pour le niveau 200. Mesuré et recoupé avec le jeu. Tu saisis ton XP cumulée, pas ton
+  niveau : un niveau ne dit pas où tu en es dans le palier, et c'est ce reste qui décide du nombre
+  de crafts.</p>
+
+  <p><strong>Ce qui reste incertain</strong>, et qui est signalé à l'écran : la <em>régression</em>.
+  Une recette rapporte moins à mesure que ton métier monte, d'environ 1 % par niveau d'écart,
+  jusqu'à ne plus rien donner cent niveaux au-dessus d'elle. Ce coefficient vient du forum
+  officiel, donné de mémoire par des joueurs, et n'est pas confirmé. Quand un chiffre est
+  <em>projeté</em> depuis un relevé fait à un autre niveau, la ligne le dit — refais un relevé
+  plutôt que de faire confiance à une longue projection.</p>
 
   <p class="attenue">Recettes : <a href="https://api.dofusdu.de" target="_blank" rel="noopener">DofusDude</a>.
   Métiers : <a href="https://github.com/bot4dofus/Datafus" target="_blank" rel="noopener">Datafus</a>, en MIT.

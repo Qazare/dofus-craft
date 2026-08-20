@@ -7,65 +7,20 @@
  * qui permet de tester la formule et la montée de niveau sous Node, sans DOM ni
  * stockage local.
  *
- * LA TABLE D'XP EST DÉRIVÉE, ET L'INTERFACE DOIT POUVOIR LE DIRE
+ * LA COURBE D'XP EST EXACTE, ET NE COÛTE PLUS RIEN
  *
- * Elle n'est relevée nulle part : le client de Dofus reçoit ses seuils du
- * serveur, aucune API ne les publie. Les niveaux pairs viennent de la table
- * officielle 1-100, recoupée par deux sources ; les impairs sont interpolés.
- * `leNiveauEstInterpole` existe pour que l'écran nuance ce qu'il affiche là où
- * ça compte, plutôt que de présenter comme sûr ce qui ne l'est pas.
+ * Elle tenait dans un fichier de données interpolé ; elle tient maintenant dans
+ * `10 × L × (L − 1)`, mesuré et recoupé avec le jeu. Plus de chargement, plus
+ * d'attente, plus de niveaux « approximatifs » — voir l'en-tête de
+ * `xp-metier.js` sur la façon dont la forme a été établie.
  */
-import { ADRESSE_DE_LA_TABLE_DXP } from "./config.js";
 import { etatApplication, lireLObservationDXP, lireLExperienceDUnMetier } from "./etat.js";
 import { lireLaRecetteConnue } from "./metiers.js";
 import {
-  deduireLExperienceDeBase, calculerLExperienceDUnCraft,
-  deduireLeNiveauDepuisLExperience, lireLeSeuilDUnNiveau, lireLeNiveauMaximal,
-  calculerLesCraftsPourAtteindreUnNiveau
+  deduireLExperienceDeBase, calculerLExperienceDUnCraft, calculerLeNiveauDepuisLXP,
+  calculerLeSeuilDUnNiveau, calculerLesCraftsPourAtteindreUnNiveau,
+  NIVEAU_MAXIMAL_DUN_METIER
 } from "./xp-metier.js";
-
-let tableDXP = null;
-let niveauxInterpoles = [];
-let chargementEnCours = null;
-
-/**
- * Charge la table, une fois pour toute la vie de la page.
- *
- * Même mémoïsation que pour les métiers, et pour la même raison : le démarrage
- * et l'ajout d'une recette peuvent appeler à quelques millisecondes d'écart.
- */
-export function chargerLaTableDXP() {
-  if (chargementEnCours) return chargementEnCours;
-
-  chargementEnCours = (async () => {
-    try {
-      const reponse = await fetch(ADRESSE_DE_LA_TABLE_DXP);
-      if (!reponse.ok) throw new Error("code " + reponse.status);
-      const contenu = await reponse.json();
-      tableDXP = contenu.xpCumuleeParNiveau;
-      niveauxInterpoles = contenu.niveauxInterpoles || [];
-      return true;
-    } catch (erreur) {
-      console.debug("Table d'XP illisible, les objectifs resteront muets :", erreur);
-      return false;
-    }
-  })();
-
-  return chargementEnCours;
-}
-
-export function laTableDXPEstChargee() {
-  return Array.isArray(tableDXP) && tableDXP.length > 0;
-}
-
-/** Vrai si le seuil de ce niveau est interpolé, donc à prendre avec réserve. */
-export function leNiveauEstInterpole(niveau) {
-  return niveauxInterpoles[niveau - 1] === 1;
-}
-
-export function lireLeNiveauMaximalDUnMetier() {
-  return laTableDXPEstChargee() ? lireLeNiveauMaximal(tableDXP) : 200;
-}
 
 /* ============================================================
    Où en est un métier
@@ -80,15 +35,12 @@ export function lireLeNiveauMaximalDUnMetier() {
  *            xpDansLePalier:number, xpRestantePourLeNiveau:number}|null}
  */
 export function lireLaSituationDUnMetier(identifiantDuMetier, nomDuMetier) {
-  if (!laTableDXPEstChargee()) return null;
-
   const experienceTotale = lireLExperienceDUnMetier(identifiantDuMetier);
-  const niveau = deduireLeNiveauDepuisLExperience(experienceTotale, tableDXP);
-  const seuilDuNiveau = lireLeSeuilDUnNiveau(niveau, tableDXP);
-  const niveauMaximal = lireLeNiveauMaximal(tableDXP);
-  const seuilSuivant = niveau >= niveauMaximal
+  const niveau = calculerLeNiveauDepuisLXP(experienceTotale);
+  const seuilDuNiveau = calculerLeSeuilDUnNiveau(niveau);
+  const seuilSuivant = niveau >= NIVEAU_MAXIMAL_DUN_METIER
     ? seuilDuNiveau
-    : lireLeSeuilDUnNiveau(niveau + 1, tableDXP);
+    : calculerLeSeuilDUnNiveau(niveau + 1);
 
   return {
     identifiantDuMetier,
@@ -99,7 +51,7 @@ export function lireLaSituationDUnMetier(identifiantDuMetier, nomDuMetier) {
     seuilSuivant,
     xpDansLePalier: experienceTotale - seuilDuNiveau,
     xpRestantePourLeNiveau: Math.max(0, seuilSuivant - experienceTotale),
-    estAuNiveauMaximal: niveau >= niveauMaximal
+    estAuNiveauMaximal: niveau >= NIVEAU_MAXIMAL_DUN_METIER
   };
 }
 
@@ -138,7 +90,7 @@ export function listerLesMetiersDeLaSession() {
  */
 export function chiffrerLXPDUnCraft(craft, niveauVise) {
   const recette = lireLaRecetteConnue(craft.identifiantAnkama);
-  if (!recette || !laTableDXPEstChargee()) return null;
+  if (!recette) return null;
 
   const situation = lireLaSituationDUnMetier(recette.jobId, recette.metier);
   const observation = lireLObservationDXP(craft.identifiantAnkama);
@@ -157,7 +109,7 @@ export function chiffrerLXPDUnCraft(craft, niveauVise) {
     xpDeBase, situation.niveau, recette.niveauRequis);
 
   const cible = niveauVise === null || niveauVise === undefined
-    ? Math.min(situation.niveau + 1, lireLeNiveauMaximal(tableDXP))
+    ? Math.min(situation.niveau + 1, NIVEAU_MAXIMAL_DUN_METIER)
     : niveauVise;
 
   const montee = calculerLesCraftsPourAtteindreUnNiveau({
@@ -165,8 +117,7 @@ export function chiffrerLXPDUnCraft(craft, niveauVise) {
     experienceActuelle: situation.experienceTotale,
     niveauVise: cible,
     xpDeBase,
-    niveauDeLaRecette: recette.niveauRequis,
-    xpCumuleeParNiveau: tableDXP
+    niveauDeLaRecette: recette.niveauRequis
   });
 
   return {

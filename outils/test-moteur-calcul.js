@@ -24,8 +24,9 @@ import { analyserLaSessionComplete, listerLesIdentifiantsDesRessourcesDeLaSessio
 import { construireLArbreDesCrafts, listerLesObjetsDeLaBranche }
   from "../calculateur/js/arbre-de-crafts.js";
 import { deduireLExperienceDeBase, calculerLeFacteurDeRegression,
-         calculerLExperienceDUnCraft, deduireLeNiveauDepuisLExperience,
-         lireLeSeuilDUnNiveau, calculerLesCraftsPourAtteindreUnNiveau }
+         calculerLExperienceDUnCraft, calculerLeNiveauDepuisLXP,
+         calculerLeSeuilDUnNiveau, calculerLesCraftsPourAtteindreUnNiveau,
+         NIVEAU_MAXIMAL_DUN_METIER }
   from "../calculateur/js/xp-metier.js";
 import { VERSION_COURANTE_DU_SCHEMA } from "../calculateur/js/config.js";
 
@@ -501,65 +502,100 @@ verifier("une observation se retrouve à l'identique",
 verifier("une XP de base indéductible vaut 0",
   deduireLExperienceDeBase(500, 200, 50), 0);
 
-console.log("\n--- Niveaux et seuils ---");
+console.log("\n--- La courbe d'XP des métiers ---");
 
-// Table courte et lisible à la main : niveau 1 à 0, puis 100, 300, 600, 1000.
-const TABLE_COURTE = [0, 100, 300, 600, 1000];
+/*
+ * `xpCumulée(L) = 10 × L × (L−1)`, parce que chaque palier coûte `20 × L`.
+ * Mesuré sur le simulateur de duffus — 20 au niveau 1, 800 au 40, 1 000 au 50,
+ * 2 000 au 100, 3 000 au 150, 3 980 au 199 — et recoupé avec le jeu : Brice,
+ * Alchimiste 40, a 15 769 XP et voit le niveau 41 annoncé à 16 400.
+ */
+verifier("le palier du niveau 1 coûte 20",
+  calculerLeSeuilDUnNiveau(2) - calculerLeSeuilDUnNiveau(1), 20);
+verifier("celui du niveau 40 coûte 800",
+  calculerLeSeuilDUnNiveau(41) - calculerLeSeuilDUnNiveau(40), 800);
+verifier("celui du niveau 199 coûte 3 980",
+  calculerLeSeuilDUnNiveau(200) - calculerLeSeuilDUnNiveau(199), 3980);
 
-verifier("sans XP, on est niveau 1", deduireLeNiveauDepuisLExperience(0, TABLE_COURTE), 1);
-verifier("99 XP, toujours niveau 1", deduireLeNiveauDepuisLExperience(99, TABLE_COURTE), 1);
-verifier("100 XP pile, niveau 2", deduireLeNiveauDepuisLExperience(100, TABLE_COURTE), 2);
-verifier("650 XP, niveau 4", deduireLeNiveauDepuisLExperience(650, TABLE_COURTE), 4);
-verifier("au-delà du dernier seuil, niveau maximal",
-  deduireLeNiveauDepuisLExperience(99999, TABLE_COURTE), 5);
-verifier("le seuil du niveau 1 est nul", lireLeSeuilDUnNiveau(1, TABLE_COURTE), 0);
-verifier("le seuil du niveau 3", lireLeSeuilDUnNiveau(3, TABLE_COURTE), 300);
+// Le relevé en jeu, qui a renversé la table dérivée à la main.
+verifier("le niveau 41 est à 16 400 XP, comme dans le jeu",
+  calculerLeSeuilDUnNiveau(41), 16400);
+verifier("15 769 XP font un Alchimiste niveau 40",
+  calculerLeNiveauDepuisLXP(15769), 40);
+verifier("le niveau 1 ne coûte rien", calculerLeSeuilDUnNiveau(1), 0);
+verifier("sans XP, on est niveau 1", calculerLeNiveauDepuisLXP(0), 1);
+verifier("pile sur un seuil, on a le niveau", calculerLeNiveauDepuisLXP(16400), 41);
+verifier("un point avant, on ne l'a pas", calculerLeNiveauDepuisLXP(16399), 40);
+verifier("le total pour le niveau 200", calculerLeSeuilDUnNiveau(200), 398000);
+verifier("et on ne dépasse pas le niveau maximal",
+  calculerLeNiveauDepuisLXP(99999999), NIVEAU_MAXIMAL_DUN_METIER);
+
+// L'inversion passe par une racine flottante, qui peut tomber à un cheveu du
+// seuil. Le recalage sur la forme exacte est vérifié sur toute l'étendue :
+// aucun niveau ne doit s'annoncer de travers juste après avoir été gagné.
+let inversionCoherente = true;
+for (let niveau = 1; niveau <= NIVEAU_MAXIMAL_DUN_METIER; niveau++) {
+  const seuil = calculerLeSeuilDUnNiveau(niveau);
+  if (calculerLeNiveauDepuisLXP(seuil) !== niveau) inversionCoherente = false;
+  if (niveau > 1 && calculerLeNiveauDepuisLXP(seuil - 1) !== niveau - 1) inversionCoherente = false;
+}
+verifier("l'inversion est exacte sur les 200 niveaux, au point près", inversionCoherente, true);
 
 console.log("\n--- Combien de crafts pour monter ---");
 
 /*
- * Recette de niveau 1, XP de base 100, métier au niveau 1 sans XP.
- *   niveau 1 vers 2 : facteur 1,00 -> 100 XP par craft, il en faut 100 -> 1 craft
- *   niveau 2 vers 3 : facteur 0,99 ->  99 XP par craft, il manque 200 -> 3 crafts
- *                     (le surplus du palier précédent est reporté)
+ * Le cas de Brice, en vrai. Alchimiste 40 avec 15 769 XP, et l'Essence de
+ * Batofu qui rapporte 160 XP au niveau 40 pour une recette de niveau 40.
+ *   palier 40 -> 41 : il manque 16 400 - 15 769 = 631 XP, à 160 par craft,
+ *                     soit 4 crafts.
  */
 let montee = calculerLesCraftsPourAtteindreUnNiveau({
-  niveauActuel: 1, experienceActuelle: 0, niveauVise: 3,
-  xpDeBase: 100, niveauDeLaRecette: 1, xpCumuleeParNiveau: TABLE_COURTE
+  niveauActuel: 40, experienceActuelle: 15769, niveauVise: 41,
+  xpDeBase: 160, niveauDeLaRecette: 40
 });
 verifier("la montée est atteignable", montee.atteignable, true);
-verifier("l'XP par craft baisse d'un palier à l'autre",
-  montee.paliers.map(p => p.xpParCraft), [100, 99]);
-verifier("nombre de crafts par palier", montee.paliers.map(p => p.nombreDeCrafts), [1, 3]);
-verifier("total des crafts", montee.nombreDeCrafts, 4);
+verifier("l'XP manquante pour le niveau 41", montee.paliers[0].xpManquante, 631);
+verifier("quatre Essences de Batofu suffisent", montee.nombreDeCrafts, 4);
 
-// Le report du surplus n'est pas un détail : sans lui, le second palier
-// demanderait 3 crafts à partir de 100 XP au lieu de partir de 100 XP acquis.
-verifier("le surplus du palier précédent est reporté",
-  montee.paliers[1].xpManquante, 200);
+/*
+ * Sur plusieurs paliers, l'XP par craft baisse d'un point de pourcentage par
+ * niveau gagné, et le nombre de crafts monte en conséquence.
+ */
+montee = calculerLesCraftsPourAtteindreUnNiveau({
+  niveauActuel: 40, experienceActuelle: 15600, niveauVise: 44,
+  xpDeBase: 160, niveauDeLaRecette: 40
+});
+verifier("l'XP par craft baisse d'un palier à l'autre",
+  montee.paliers.map(p => p.xpParCraft), [160, 158, 156, 155]);
+verifier("le nombre de crafts par palier",
+  montee.paliers.map(p => p.nombreDeCrafts), [5, 6, 5, 6]);
+
+/*
+ * Le report du surplus n'est pas un détail, et c'est le troisième palier qui le
+ * montre : le palier 42 -> 43 coûte 840 XP en tout, mais il n'en manque que 712
+ * parce que le palier précédent s'est terminé 128 au-dessus de son seuil. Sans
+ * ce report, il faudrait 6 crafts au lieu de 5, et l'erreur s'accumulerait sur
+ * toute une montée.
+ */
+verifier("le palier 42 -> 43 coûte 840 XP",
+  calculerLeSeuilDUnNiveau(43) - calculerLeSeuilDUnNiveau(42), 840);
+verifier("mais il n'en manque que 712, surplus reporté",
+  montee.paliers[2].xpManquante, 712);
 
 verifier("un niveau déjà atteint ne demande aucun craft",
   calculerLesCraftsPourAtteindreUnNiveau({
-    niveauActuel: 3, experienceActuelle: 300, niveauVise: 3,
-    xpDeBase: 100, niveauDeLaRecette: 1, xpCumuleeParNiveau: TABLE_COURTE
+    niveauActuel: 40, experienceActuelle: 15769, niveauVise: 40,
+    xpDeBase: 160, niveauDeLaRecette: 40
   }).nombreDeCrafts, 0);
 
 // Une recette trop basse pour le métier ne mène nulle part, et le dire vaut
 // mieux que de renvoyer un nombre de crafts astronomique.
 const monteeImpossible = calculerLesCraftsPourAtteindreUnNiveau({
-  niveauActuel: 3, experienceActuelle: 300, niveauVise: 5,
-  xpDeBase: 100, niveauDeLaRecette: -120, xpCumuleeParNiveau: TABLE_COURTE
+  niveauActuel: 140, experienceActuelle: calculerLeSeuilDUnNiveau(140),
+  niveauVise: 150, xpDeBase: 160, niveauDeLaRecette: 40
 });
-verifier("une recette qui ne rapporte plus rien bloque la montée",
-  monteeImpossible.atteignable, false);
-verifier("et le niveau de blocage est annoncé", monteeImpossible.niveauDeBlocage, 3);
-
-// Partir en cours de palier : l'XP déjà acquise compte.
-verifier("l'XP déjà acquise dans le palier est comptée",
-  calculerLesCraftsPourAtteindreUnNiveau({
-    niveauActuel: 1, experienceActuelle: 60, niveauVise: 2,
-    xpDeBase: 40, niveauDeLaRecette: 1, xpCumuleeParNiveau: TABLE_COURTE
-  }).nombreDeCrafts, 1);
+verifier("une recette éteinte bloque la montée", monteeImpossible.atteignable, false);
+verifier("et le niveau de blocage est annoncé", monteeImpossible.niveauDeBlocage, 140);
 
 console.log("\n" + (nombreDEchecs === 0
   ? "Tous les tests passent."

@@ -13,28 +13,94 @@
  * qui fait qu'une recette rentable à 40 ne vaut plus rien à 140.
  *
  * Deux formules circulent sur le forum officiel, toutes deux données de mémoire
- * par des joueurs. Celle-ci est retenue parce qu'elle est la seule des deux à
- * tenir devant les relevés de Brice — au métier 89, une recette 90 rapporte
- * 1 800, une 89 rapporte 1 618, une 88 rapporte 1 449. Elle en déduit des XP de
- * base de 1 782, 1 618 et 1 464, soit une progression régulière d'environ 10 %
- * par niveau de recette. L'autre formule, en `1 / (1 + 0,1 × écart^1,1)`, en
- * déduit 1 800, 1 618 et 1 594 : une progression de 1,5 % puis de 11 %, ce qui
- * ne ressemble à aucune courbe. Voir `outils/test-moteur-calcul.js`.
+ * par des joueurs, et celle-ci est retenue faute de mieux. LE COEFFICIENT N'EST
+ * PAS CONFIRMÉ, contrairement à la courbe de niveau ci-dessous qui, elle, est
+ * mesurée.
+ *
+ * Il l'a semblé un moment : les trois relevés du métier 89 — recette 90 à
+ * 1 800, 89 à 1 618, 88 à 1 449 — donnaient des XP de base de 1 782, 1 618 et
+ * 1 464, soit une progression régulière d'environ 10 % par niveau de recette,
+ * là où la formule concurrente en `1 / (1 + 0,1 × écart^1,1)` donnait 1,5 %
+ * puis 11 %. L'argument paraissait fort.
+ *
+ * Il ne tient plus. Les relevés d'Alchimiste 40 le démontent : trois recettes
+ * de niveau 40, au même niveau de métier, rapportent 160, 40 et 80 XP. L'XP de
+ * base est donc PROPRE À CHAQUE RECETTE, et ni son niveau ni son nombre de
+ * cases ne la prédisent. La régularité observée sur les trois recettes de
+ * niveau 88, 89 et 90 était une coïncidence, et ne prouvait rien.
+ *
+ * Conséquence pratique : le coefficient de 1 % par niveau reste une hypothèse.
+ * Un seul relevé la trancherait — la même recette, à deux niveaux de métier
+ * différents. En attendant, l'écran signale quand un chiffre est projeté plutôt
+ * qu'observé, et un relevé frais vaut toujours mieux qu'une longue projection.
  *
  * L'XP DE BASE NE SE DEVINE PAS, ELLE SE CALIBRE
  *
- * Aucune source publique ne donne l'XP de base d'une recette, et la deviner
- * demanderait d'extrapoler une exponentielle sur deux cents niveaux depuis
- * trois points voisins — une erreur de 1 % par niveau y devient un facteur 7.
+ * Aucune source publique ne donne l'XP de base d'une recette, et on sait
+ * maintenant qu'aucune formule ne la donnera : elle ne se déduit ni du niveau
+ * de la recette ni de son nombre de cases. Essence de Batofu et Potion de Soin
+ * sont toutes deux de niveau 40, chez le même métier ; l'une rapporte 160, la
+ * seconde 40.
  *
  * On prend donc le problème par l'autre bout : Brice relève UNE fois l'XP que
  * lui rapporte une recette, en disant à quel niveau de métier il l'a vue, et la
- * formule remonte à l'XP de base. Tout le reste s'en déduit, à n'importe quel
- * niveau. C'est un relevé qu'il faisait déjà — il ne servait simplement à rien.
+ * formule remonte à l'XP de base. C'est un relevé qu'il faisait déjà — il ne
+ * servait simplement à rien. Ce choix n'était au départ qu'une prudence ; les
+ * relevés d'Alchimiste en ont fait la seule approche possible.
  */
 
 /** Écart maximal au-delà duquel une recette ne rapporte plus rien. */
 const ECART_ANNULANT_LEXPERIENCE = 100;
+
+/* ============================================================
+   LA COURBE D'XP DES MÉTIERS, EN FORME CLOSE
+
+   Le palier du niveau L au suivant coûte `20 × L`, donc l'XP cumulée pour
+   atteindre le niveau L vaut la somme des paliers précédents :
+
+       xpCumulée(L) = Σ 20k pour k de 1 à L-1  =  10 × L × (L − 1)
+
+   Établie sur des mesures, pas devinée. Le palier vaut 20 au niveau 1, 800 au
+   niveau 40, 1 000 au 50, 2 000 au 100, 3 000 au 150 et 3 980 au 199 : c'est
+   `20 × L` sur toute l'étendue. Et la forme close tombe juste sur le relevé en
+   jeu de Brice — Alchimiste niveau 40 avec 15 769 XP, le niveau 41 annoncé à
+   16 400, et 10 × 41 × 40 fait exactement 16 400.
+
+   Cette forme remplace une table dérivée à la main de la table historique
+   1-100 et du devblog de la refonte. Celle-là donnait 8 347 XP au niveau 40 là
+   où le jeu en demande 15 600 : le raisonnement était défendable, il était
+   faux, et c'est le relevé qui l'a montré. Rien ne remplace une mesure.
+
+   Conséquence agréable : plus de fichier de données, plus d'interpolation, plus
+   de niveaux « approximatifs ». Deux multiplications suffisent, et le total
+   pour le niveau 200 tombe à 398 000 XP.
+   ============================================================ */
+
+/** Niveau maximal d'un métier depuis la refonte. */
+export const NIVEAU_MAXIMAL_DUN_METIER = 200;
+
+/** XP cumulée nécessaire pour atteindre un niveau. */
+export function calculerLeSeuilDUnNiveau(niveau) {
+  const borne = Math.min(Math.max(1, niveau), NIVEAU_MAXIMAL_DUN_METIER);
+  return 10 * borne * (borne - 1);
+}
+
+/**
+ * Niveau atteint avec une XP cumulée donnée.
+ *
+ * Inversion directe de `10 L (L-1) ≤ xp`, soit `L = ⌊(1 + √(1 + 2xp/5)) / 2⌋`.
+ * La racine flottante peut tomber à un cheveu du seuil sur les grands nombres,
+ * ce qui ferait annoncer un niveau de moins juste après en avoir gagné un. Le
+ * résultat est donc recalé sur la forme exacte, qui est en nombres entiers.
+ */
+export function calculerLeNiveauDepuisLXP(experienceTotale) {
+  const xp = Math.max(0, experienceTotale || 0);
+  let niveau = Math.floor((1 + Math.sqrt(1 + 2 * xp / 5)) / 2);
+  niveau = Math.min(Math.max(1, niveau), NIVEAU_MAXIMAL_DUN_METIER);
+  while (niveau < NIVEAU_MAXIMAL_DUN_METIER && calculerLeSeuilDUnNiveau(niveau + 1) <= xp) niveau++;
+  while (niveau > 1 && calculerLeSeuilDUnNiveau(niveau) > xp) niveau--;
+  return niveau;
+}
 
 /**
  * XP de base d'une recette, déduite d'une observation.
@@ -75,38 +141,6 @@ export function calculerLExperienceDUnCraft(xpDeBase, niveauDeMetier, niveauDeLa
 }
 
 /* ============================================================
-   Niveaux et seuils
-   ============================================================ */
-
-/**
- * Niveau atteint avec une XP cumulée donnée.
- * @param {number[]} xpCumuleeParNiveau  index 0 = niveau 1
- */
-export function deduireLeNiveauDepuisLExperience(experienceTotale, xpCumuleeParNiveau) {
-  const xp = Math.max(0, experienceTotale || 0);
-  let niveau = 1;
-  // Parcours ascendant plutôt que dichotomie : deux cents entrées, et le code
-  // se relit sans effort. La dichotomie ici serait une optimisation qu'aucune
-  // mesure ne réclame.
-  for (let rang = 1; rang < xpCumuleeParNiveau.length; rang++) {
-    if (xp >= xpCumuleeParNiveau[rang]) niveau = rang + 1;
-    else break;
-  }
-  return niveau;
-}
-
-/** XP cumulée nécessaire pour atteindre un niveau. */
-export function lireLeSeuilDUnNiveau(niveau, xpCumuleeParNiveau) {
-  if (niveau <= 1) return 0;
-  const rang = Math.min(niveau, xpCumuleeParNiveau.length) - 1;
-  return xpCumuleeParNiveau[rang];
-}
-
-export function lireLeNiveauMaximal(xpCumuleeParNiveau) {
-  return xpCumuleeParNiveau.length;
-}
-
-/* ============================================================
    Combien de crafts pour atteindre un niveau
    ============================================================ */
 
@@ -127,15 +161,11 @@ export function lireLeNiveauMaximal(xpCumuleeParNiveau) {
  *   @param {number} situation.niveauVise
  *   @param {number} situation.xpDeBase
  *   @param {number} situation.niveauDeLaRecette
- *   @param {number[]} situation.xpCumuleeParNiveau
  * @returns {{atteignable:boolean, nombreDeCrafts:number, experienceAGagner:number,
  *            paliers:Array, niveauDeBlocage:number|null}}
  */
 export function calculerLesCraftsPourAtteindreUnNiveau(situation) {
-  const {
-    niveauActuel, experienceActuelle, niveauVise,
-    xpDeBase, niveauDeLaRecette, xpCumuleeParNiveau
-  } = situation;
+  const { niveauActuel, experienceActuelle, niveauVise, xpDeBase, niveauDeLaRecette } = situation;
 
   const resultat = {
     atteignable: true,
@@ -152,8 +182,8 @@ export function calculerLesCraftsPourAtteindreUnNiveau(situation) {
     return resultat;
   }
 
-  let experience = Math.max(experienceActuelle || 0, lireLeSeuilDUnNiveau(niveauActuel, xpCumuleeParNiveau));
-  const plafond = Math.min(niveauVise, lireLeNiveauMaximal(xpCumuleeParNiveau));
+  let experience = Math.max(experienceActuelle || 0, calculerLeSeuilDUnNiveau(niveauActuel));
+  const plafond = Math.min(niveauVise, NIVEAU_MAXIMAL_DUN_METIER);
 
   for (let niveau = niveauActuel; niveau < plafond; niveau++) {
     const xpParCraft = calculerLExperienceDUnCraft(xpDeBase, niveau, niveauDeLaRecette);
@@ -166,7 +196,7 @@ export function calculerLesCraftsPourAtteindreUnNiveau(situation) {
       return resultat;
     }
 
-    const seuilSuivant = lireLeSeuilDUnNiveau(niveau + 1, xpCumuleeParNiveau);
+    const seuilSuivant = calculerLeSeuilDUnNiveau(niveau + 1);
     const xpManquante = Math.max(0, seuilSuivant - experience);
     const craftsDeCePalier = Math.ceil(xpManquante / xpParCraft);
 

@@ -505,10 +505,6 @@ input::placeholder { color: #4c574f; }
 .niveau-metier { font-size: 11px; color: var(--accent); }
 .progression-metier { font-size: 11px; margin-top: 6px; }
 
-/* Un seuil interpolé plutôt que relevé. Signalé, pas caché : l'utilisateur
-   décide ce qu'il fait d'une approximation, à condition de la connaître. */
-.pastille-approximatif { color: var(--alerte); border-style: dashed; }
-
 /* La ligne d'XP d'une carte de craft. Même gabarit que la ligne de bilan, dont
    elle est le pendant : l'une chiffre les kamas, l'autre l'expérience. */
 .ligne-xp {
