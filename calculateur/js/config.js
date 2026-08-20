@@ -46,13 +46,15 @@ export const NOMBRE_DE_SUGGESTIONS_PAR_FAMILLE = 6;
 export const ADRESSE_DES_METIERS_PAR_RECETTE = "donnees/metiers-par-recette.json";
 
 /**
- * Objectifs proposés sur une carte de craft.
+ * Objectifs proposés sur une carte de craft, en NOMBRE DE NIVEAUX À GAGNER.
  *
- * `null` vaut « le prochain niveau », qui n'est pas un nombre fixe puisqu'il
- * dépend du niveau courant. Les autres sont les paliers ronds où l'on décide
- * habituellement de changer de recette.
+ * Des paliers absolus — 20, 40, 60… — étaient à la fois trop rigides et à
+ * moitié inutiles : la moitié de la liste était déjà dépassée, et « monter de
+ * dix » ne s'y exprimait pas. La question posée devant l'écran est toujours
+ * « combien de crafts pour gagner un niveau, dix, vingt ? », jamais « combien
+ * pour atteindre le 140 » quand on est au 39.
  */
-export const OBJECTIFS_DE_NIVEAU_PROPOSES = [null, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200];
+export const OBJECTIFS_DE_NIVEAU_PROPOSES = [1, 10, 20];
 
 /**
  * Métiers de Dofus, indexés par le `jobId` des fichiers du jeu. Recopiés plutôt
@@ -167,7 +169,7 @@ export const CLE_STOCKAGE_DE_LA_SESSION = "calculateur-craft-dofus-v1";
  */
 export const CLE_STOCKAGE_DU_JETON = "calculateur-craft-dofus-jeton";
 
-export const VERSION_COURANTE_DU_SCHEMA = 7;
+export const VERSION_COURANTE_DU_SCHEMA = 8;
 
 /* ---- Format d'échange de l'OCR ----
 

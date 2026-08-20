@@ -519,3 +519,68 @@ input::placeholder { color: #4c574f; }
   cursor: pointer; margin-left: auto;
 }
 .selecteur-objectif:focus { outline: none; border-color: var(--accent); }
+
+/* ============================================================
+   LISTE DE COURSES DE LA FENÊTRE FLOTTANTE
+
+   Une ligne par ressource, lue de gauche à droite dans l'ordre du geste :
+   cocher, combien, quoi, sous quelle forme l'acheter, à quel prix, pour
+   combien. Le tableau à dix colonnes qu'elle remplace demandait de viser une
+   cellule dans une fenêtre de cinq cents pixels posée sur le jeu.
+   ============================================================ */
+.liste-de-courses { list-style: none; margin: 0; padding: 0; }
+.ligne-de-courses {
+  display: grid; align-items: center; gap: 8px;
+  grid-template-columns: auto 44px 20px minmax(90px, 1fr) auto auto auto;
+  padding: 5px 4px; border-bottom: 1px solid var(--bordure); font-size: 12px;
+}
+.ligne-de-courses img { width: 20px; height: 20px; }
+.ligne-de-courses .coche-achat { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+.quantite-de-courses {
+  text-align: right; font-weight: 600; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.nom-de-courses { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.panier-de-courses {
+  font-size: 11px; color: var(--texte-attenue); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cout-de-courses {
+  text-align: right; min-width: 66px; font-variant-numeric: tabular-nums;
+}
+/* Acheté : la ligne s'efface sans quitter la liste. La faire disparaître
+   empêcherait de revenir sur une case cochée par erreur. */
+.ligne-achetee { opacity: .38; }
+.ligne-achetee .nom-de-courses, .ligne-achetee .quantite-de-courses { text-decoration: line-through; }
+
+/* Le champ ×1 hors tableau : même habillage de recommandation que la cellule. */
+.case-prix-unitaire { display: inline-flex; align-items: center; border-radius: 6px; }
+.case-prix-unitaire.cellule-recommandee {
+  background: var(--fond-recommande); box-shadow: inset 2px 0 0 var(--accent);
+}
+.liste-de-courses .champ-prix-lot { width: 66px; }
+
+/* ============================================================
+   CALIBRAGE AUTOMATIQUE DE L'XP, SUR LA CARTE DU MÉTIER
+   ============================================================ */
+.calibrage-xp {
+  margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--bordure);
+  font-size: 11px;
+}
+.gain-xp { color: var(--gain); font-weight: 600; margin-bottom: 6px; }
+.ligne-calibrage { display: flex; gap: 5px; align-items: center; }
+.ligne-calibrage select {
+  flex: 1; min-width: 0; font: inherit; font-size: 11px; color: var(--texte);
+  background: var(--fond-champ); border: 1px solid var(--bordure);
+  border-radius: 7px; padding: 4px 6px; cursor: pointer;
+}
+.ligne-calibrage input {
+  width: 52px; text-align: right; font-variant-numeric: tabular-nums;
+}
+
+/* La quantité pilotée par un objectif de niveau : dit d'où vient le chiffre du
+   champ, qui n'a pas été tapé à la main. */
+.pastille-objectif { color: var(--accent); border-color: var(--bordure-active); }
+
+/* Un bilan qu'aucun prix ne permet de calculer n'affiche aucun montant. */
+.bilan-incalculable { align-items: baseline; }

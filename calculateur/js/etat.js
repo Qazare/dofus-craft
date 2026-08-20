@@ -43,6 +43,10 @@ import {
  *     pour devenir une OBSERVATION datée d'un niveau : `{ xpObservee,
  *     niveauMetierObserve }`. Sans le niveau, le chiffre ne vaut qu'à ce
  *     niveau-là et ne peut être projeté nulle part.
+ * 8 : `dernierReleveDXPParMetier` garde l'avant-dernière XP cumulée saisie pour
+ *     chaque métier. C'est ce qui permet de calibrer une recette SANS jamais
+ *     taper d'XP par craft : l'écart entre deux relevés, divisé par le nombre
+ *     de crafts faits entre les deux, EST l'XP par craft.
  *
  * Toute évolution du format incrémente ce numéro et ajoute son étape dans
  * `migrerLEtatVersLeSchemaCourant`.
@@ -81,7 +85,11 @@ export function construireUnEtatVierge() {
     // Observations d'XP par recette : `{ xpObservee, niveauMetierObserve }`.
     // Le niveau d'observation est ce qui rend le chiffre projetable, la
     // régression se déduisant de l'écart entre ce niveau et celui de la recette.
-    memoireExperienceParRecette: {}
+    memoireExperienceParRecette: {},
+    // Relevé précédent d'XP cumulée par métier : `{ experienceTotale, niveau }`.
+    // Sans lui, un gain d'XP n'est qu'un nombre qui monte ; avec lui, c'est une
+    // mesure — celle de ce qu'un craft rapporte réellement.
+    dernierReleveDXPParMetier: {}
   };
 }
 
@@ -260,6 +268,15 @@ export function migrerLEtatVersLeSchemaCourant() {
     console.info("Schéma 6 vers 7 : les XP relevées attendent leur niveau d'observation.");
   }
 
+  // --- 7 vers 8 : le relevé précédent, qui rend le calibrage automatique ---
+  //
+  // Rien à convertir : le premier relevé fait après la mise à jour devient la
+  // référence, et le calibrage automatique s'amorce au second.
+  if (versionDeLEtatCharge < 8) {
+    if (!etatApplication.dernierReleveDXPParMetier) etatApplication.dernierReleveDXPParMetier = {};
+    console.info("Schéma 7 vers 8 : les relevés d'XP de métier se souviennent du précédent.");
+  }
+
   etatApplication.versionDuSchema = VERSION_COURANTE_DU_SCHEMA;
   sauvegarderEtat();
 }
@@ -297,9 +314,45 @@ export function lireLExperienceDUnMetier(identifiantDuMetier) {
   return parMetier[identifiantDuMetier] || 0;
 }
 
+/**
+ * Nouvelle XP cumulée pour un métier.
+ *
+ * L'ancienne valeur n'est pas jetée : elle devient le relevé précédent, et
+ * c'est lui qui rend le calibrage automatique possible. Le gain entre deux
+ * relevés, divisé par le nombre de crafts faits entre les deux, donne l'XP par
+ * craft sans que Brice n'ait rien à taper de plus que ce chiffre qu'il saisit
+ * déjà.
+ *
+ * Une saisie qui ne change rien, ou qui corrige à la baisse une faute de
+ * frappe, n'écrase pas le relevé précédent : ce ne sont pas des mesures, et les
+ * garder ferait perdre la seule qui vaille.
+ */
 export function enregistrerLExperienceDUnMetier(identifiantDuMetier, experienceTotale) {
   if (!etatApplication.experienceParMetier) etatApplication.experienceParMetier = {};
-  etatApplication.experienceParMetier[identifiantDuMetier] = Math.max(0, experienceTotale || 0);
+  if (!etatApplication.dernierReleveDXPParMetier) etatApplication.dernierReleveDXPParMetier = {};
+
+  const ancienne = etatApplication.experienceParMetier[identifiantDuMetier] || 0;
+  const nouvelle = Math.max(0, experienceTotale || 0);
+
+  if (nouvelle > ancienne && ancienne > 0) {
+    etatApplication.dernierReleveDXPParMetier[identifiantDuMetier] = {
+      experienceTotale: ancienne,
+      horodatage: Date.now()
+    };
+  }
+  etatApplication.experienceParMetier[identifiantDuMetier] = nouvelle;
+}
+
+/** Relevé d'XP précédent d'un métier, null tant qu'il n'y en a pas eu deux. */
+export function lireLeReleveDXPPrecedent(identifiantDuMetier) {
+  const parMetier = etatApplication.dernierReleveDXPParMetier || {};
+  return parMetier[identifiantDuMetier] || null;
+}
+
+/** Oublie le relevé précédent : le gain a été attribué, il ne l'est qu'une fois. */
+export function oublierLeReleveDXPPrecedent(identifiantDuMetier) {
+  if (!etatApplication.dernierReleveDXPParMetier) return;
+  delete etatApplication.dernierReleveDXPParMetier[identifiantDuMetier];
 }
 
 /**

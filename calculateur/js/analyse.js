@@ -32,6 +32,7 @@ import {
   construireLesPrixDeLotEffectifs, determinerLePrixUnitaire,
   obtenirLePrixCommunautaire, laBaseEstEnDesaccord, lireLEtatDePublication
 } from "./prix-communautaires.js";
+import { chiffrerLXPDUnCraft } from "./xp-session.js";
 
 export function analyserLaSessionComplete() {
   const tauxDeTaxe = (etatApplication.tauxDeTaxeEnPourcent || 0) / 100;
@@ -206,7 +207,12 @@ export function analyserLaSessionComplete() {
     profitTotalDeLaSession: revenuBrutTotal - taxeTotale - coutAttribueTotal,
     coutDesCraftsPourUsagePersonnel,
     experienceTotaleGagnee,
-    nombreDeRessourcesSansPrix
+    nombreDeRessourcesSansPrix,
+    // Aucun prix nulle part : le coût total vaut zéro pour cette seule raison,
+    // et le « résultat de session » qui s'en déduit serait un pur mirage. Le
+    // bandeau le dit au lieu de l'afficher.
+    aucunPrixDeRessourceConnu:
+      nombreDeRessourcesSansPrix > 0 && coutTotalDesRessources === 0
   };
 }
 
@@ -220,10 +226,18 @@ export function analyserLaSessionComplete() {
 function chiffrerUnCraft(noeud, bilansParLigne, tauxDeTaxe, prix) {
   const craft = noeud.craft;
   const estUnSousCraft = noeud.parent !== null;
+  const bilanDXP = chiffrerLXPDUnCraft(craft, 1);
 
   // --- Ce que ce craft achète pour son propre compte ---
+  // Les deux compteurs ne font pas double emploi avec le drapeau qu'ils
+  // remplacent : savoir qu'il MANQUE un prix ne dit pas si le total affiché
+  // vaut encore quelque chose. Un coût amputé d'un ingrédient sur douze est un
+  // ordre de grandeur ; un coût dont AUCUN prix n'est connu vaut zéro kama et
+  // ferait passer n'importe quel craft pour une mine d'or. La vue a besoin de
+  // distinguer les deux, et c'est ici que la distinction se compte.
   let coutDesRessources = 0;
-  let auMoinsUnPrixManquant = false;
+  let nombreDeCoutsConnus = 0;
+  let nombreDeCoutsManquants = 0;
 
   for (const ingredient of craft.ingredients) {
     // Produit par un atelier de la session : son coût arrive par la branche,
@@ -232,8 +246,9 @@ function chiffrerUnCraft(noeud, bilansParLigne, tauxDeTaxe, prix) {
 
     const coutUnitaire = prix.coutUnitaireEffectifParRessource[ingredient.identifiantAnkama];
     if (coutUnitaire === null || coutUnitaire === undefined) {
-      auMoinsUnPrixManquant = true;
+      nombreDeCoutsManquants++;
     } else {
+      nombreDeCoutsConnus++;
       coutDesRessources += coutUnitaire * ingredient.quantiteParCraft * noeud.quantiteEffective;
     }
   }
@@ -247,8 +262,16 @@ function chiffrerUnCraft(noeud, bilansParLigne, tauxDeTaxe, prix) {
     const bilanDeLEnfant = bilansParLigne.get(enfant.craft.identifiantDeLigne);
     if (!bilanDeLEnfant) continue;
     coutDesRessources += bilanDeLEnfant.coutDesRessources;
-    if (bilanDeLEnfant.auMoinsUnPrixManquant) auMoinsUnPrixManquant = true;
+    nombreDeCoutsConnus += bilanDeLEnfant.nombreDeCoutsConnus;
+    nombreDeCoutsManquants += bilanDeLEnfant.nombreDeCoutsManquants;
   }
+
+  const auMoinsUnPrixManquant = nombreDeCoutsManquants > 0;
+  // Rien de connu du tout : le coût n'est pas « approximatif », il n'existe
+  // pas. Tout ce qui s'en déduit — profit, seuil de revente, arbitrage entre
+  // crafter et acheter — est alors un chiffre inventé, et la vue doit le taire
+  // plutôt que de l'afficher.
+  const coutEntierementInconnu = nombreDeCoutsConnus === 0 && nombreDeCoutsManquants > 0;
 
   const quantite = noeud.quantiteEffective;
   const coutParObjet = quantite > 0 ? coutDesRessources / quantite : 0;
@@ -286,10 +309,17 @@ function chiffrerUnCraft(noeud, bilansParLigne, tauxDeTaxe, prix) {
     taxe,
     profitTotal,
     profitParObjet: quantite > 0 ? profitTotal / quantite : 0,
-    experienceGagnee: (craft.experienceParCraft || 0) * quantite,
+    // L'XP est celle que la recette rapporte AU NIVEAU ACTUEL du métier, prise
+    // au calibrage. Elle était lue sur un champ `experienceParCraft` disparu
+    // avec le schéma 7 : le produit portait alors sur un objet, donnait NaN, et
+    // la case « coût par point d'XP » ne s'affichait plus jamais.
+    experienceGagnee: (bilanDXP ? bilanDXP.xpParCraftMaintenant : 0) * quantite,
     prixDeVenteMinimalPourNePasPerdre:
       quantite > 0 && tauxDeTaxe < 1 ? coutParObjet / (1 - tauxDeTaxe) : 0,
-    auMoinsUnPrixManquant
+    auMoinsUnPrixManquant,
+    coutEntierementInconnu,
+    nombreDeCoutsConnus,
+    nombreDeCoutsManquants
   };
 }
 

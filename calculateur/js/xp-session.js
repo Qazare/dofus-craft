@@ -14,7 +14,10 @@
  * d'attente, plus de niveaux « approximatifs » — voir l'en-tête de
  * `xp-metier.js` sur la façon dont la forme a été établie.
  */
-import { etatApplication, lireLObservationDXP, lireLExperienceDUnMetier } from "./etat.js";
+import {
+  etatApplication, lireLObservationDXP, lireLExperienceDUnMetier,
+  lireLeReleveDXPPrecedent, oublierLeReleveDXPPrecedent, enregistrerLObservationDXP
+} from "./etat.js";
 import { lireLaRecetteConnue } from "./metiers.js";
 import {
   deduireLExperienceDeBase, calculerLExperienceDUnCraft, calculerLeNiveauDepuisLXP,
@@ -85,10 +88,10 @@ export function listerLesMetiersDeLaSession() {
  * qu'il faudrait en faire pour atteindre l'objectif visé.
  *
  * @param craft            la ligne de craft
- * @param {number|null} niveauVise  null vaut « le prochain niveau »
+ * @param {number|null} niveauxAGagner  nombre de niveaux visés, 1 par défaut
  * @returns {Object|null} null si le métier de la recette est inconnu
  */
-export function chiffrerLXPDUnCraft(craft, niveauVise) {
+export function chiffrerLXPDUnCraft(craft, niveauxAGagner) {
   const recette = lireLaRecetteConnue(craft.identifiantAnkama);
   if (!recette) return null;
 
@@ -108,9 +111,11 @@ export function chiffrerLXPDUnCraft(craft, niveauVise) {
   const xpParCraftMaintenant = calculerLExperienceDUnCraft(
     xpDeBase, situation.niveau, recette.niveauRequis);
 
-  const cible = niveauVise === null || niveauVise === undefined
-    ? Math.min(situation.niveau + 1, NIVEAU_MAXIMAL_DUN_METIER)
-    : niveauVise;
+  // L'objectif est un NOMBRE DE NIVEAUX À GAGNER, pas un palier absolu : c'est
+  // la question qu'on se pose devant l'écran, et elle reste valable quel que
+  // soit le niveau courant. Le palier visé s'en déduit ici, une fois pour toutes.
+  const niveauxVises = Math.max(1, niveauxAGagner || 1);
+  const cible = Math.min(situation.niveau + niveauxVises, NIVEAU_MAXIMAL_DUN_METIER);
 
   const montee = calculerLesCraftsPourAtteindreUnNiveau({
     niveauActuel: situation.niveau,
@@ -128,9 +133,78 @@ export function chiffrerLXPDUnCraft(craft, niveauVise) {
     xpDeBase,
     xpParCraftMaintenant,
     niveauVise: cible,
+    niveauxVises,
     montee,
     // Le niveau à partir duquel cette recette cesse de rapporter. Ce que Brice
     // veut vraiment savoir : jusqu'où elle le mène avant de devoir en changer.
     niveauOuLaRecetteSEteint: recette.niveauRequis + 100
   };
+}
+
+/* ============================================================
+   CALIBRAGE AUTOMATIQUE PAR L'XP TOTALE DU MÉTIER
+
+   Ce que le jeu donne gratuitement, c'est l'XP CUMULÉE du métier — un seul
+   nombre, lisible dans l'interface, que Brice saisit déjà. Ce qu'il ne donne
+   nulle part, c'est l'XP de base d'une recette. Réclamer une saisie « XP vue
+   par craft » revenait à faire faire à la main une soustraction que la machine
+   peut faire seule.
+
+   Le principe tient en une ligne : DEUX RELEVÉS D'XP TOTALE ENCADRANT UN LOT DE
+   CRAFTS SUFFISENT. Le gain divisé par le nombre de crafts est l'XP par craft,
+   observée au niveau du premier relevé — exactement la mesure que le calibrage
+   attend, mais obtenue sans rien taper de plus.
+
+   Deux précautions, et elles ne sont pas décoratives :
+
+     Le gain est attribué À UNE recette, choisie explicitement quand la session
+     en contient plusieurs pour le même métier. Répartir au prorata inventerait
+     une hypothèse sur des chiffres qu'on cherche justement à mesurer.
+
+     Le relevé précédent est OUBLIÉ une fois le gain attribué. Un même gain
+     attribué deux fois donnerait une seconde mesure qui n'en est pas une.
+   ============================================================ */
+
+/**
+ * Le gain d'XP en attente d'attribution pour un métier, et à quoi l'attribuer.
+ *
+ * @returns {{gain:number, niveauAuReleve:number, craftsCandidats:Array}|null}
+ *          null quand il n'y a pas deux relevés, ou aucun gain
+ */
+export function decrireLeGainDXPAAttribuer(identifiantDuMetier) {
+  const precedent = lireLeReleveDXPPrecedent(identifiantDuMetier);
+  if (!precedent) return null;
+
+  const experienceActuelle = lireLExperienceDUnMetier(identifiantDuMetier);
+  const gain = experienceActuelle - (precedent.experienceTotale || 0);
+  if (!(gain > 0)) return null;
+
+  const craftsCandidats = etatApplication.craftsDeLaSession
+    .map(craft => ({ craft, recette: lireLaRecetteConnue(craft.identifiantAnkama) }))
+    .filter(entree => entree.recette && entree.recette.jobId === identifiantDuMetier);
+
+  return {
+    gain,
+    // Le niveau où le lot a été crafté, donc celui auquel la mesure vaut. Pris
+    // au relevé de DÉPART : c'est là que les crafts ont commencé.
+    niveauAuReleve: calculerLeNiveauDepuisLXP(precedent.experienceTotale || 0),
+    craftsCandidats
+  };
+}
+
+/**
+ * Attribue un gain d'XP à une recette, et en déduit son calibrage.
+ *
+ * @returns {{xpParCraft:number}|null} null si le compte de crafts est absurde
+ */
+export function calibrerUneRecetteParLeGain(
+    identifiantDuMetier, identifiantAnkama, gain, nombreDeCrafts, niveauAuReleve) {
+  if (!(gain > 0) || !(nombreDeCrafts > 0)) return null;
+
+  const xpParCraft = Math.round(gain / nombreDeCrafts);
+  if (!(xpParCraft > 0)) return null;
+
+  enregistrerLObservationDXP(identifiantAnkama, xpParCraft, niveauAuReleve);
+  oublierLeReleveDXPPrecedent(identifiantDuMetier);
+  return { xpParCraft };
 }

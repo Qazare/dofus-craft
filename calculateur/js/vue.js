@@ -22,7 +22,8 @@ import { construireLEnteteDeCraft, construireLaListeDesIngredients,
          construireLArbitrageCraftOuAchat, construireLeNomCopiable,
          construireLaPastilleDeMetier, construireLeCalibrageDXP,
          construireLaLigneDXP } from "./cartes-de-craft.js";
-import { chiffrerLXPDUnCraft, listerLesMetiersDeLaSession } from "./xp-session.js";
+import { chiffrerLXPDUnCraft, listerLesMetiersDeLaSession,
+         decrireLeGainDXPAAttribuer, calibrerUneRecetteParLeGain } from "./xp-session.js";
 import { crafterUneRessourceSurPlace, retirerUnCraftEtSaDescendance } from "./crafts.js";
 import { lireLaRecetteConnue } from "./metiers.js";
 import { brancherLaCopieDesNoms } from "./presse-papier.js";
@@ -53,6 +54,10 @@ export function enregistrerLeRedessinSecondaire(fonction) {
 }
 
 export function redessinerToutLEcran() {
+  // Les objectifs de niveau pilotent la quantité, donc ils s'appliquent AVANT
+  // l'analyse : la remplir après coup afficherait un chiffrage fait sur
+  // l'ancienne quantité, et il faudrait un second passage pour le rattraper.
+  appliquerLesObjectifsAuxQuantites();
   const analyse = analyserLaSessionComplete();
   dessinerLeBandeauDeResultats(analyse);
   dessinerLesMetiers();
@@ -68,11 +73,28 @@ export function redessinerToutLEcran() {
 function dessinerLeBandeauDeResultats(analyse) {
   const classeDuProfit = analyse.profitTotalDeLaSession >= 0 ? "gain" : "perte";
   const signeDuProfit = analyse.profitTotalDeLaSession >= 0 ? "+" : "";
+  // Un coût partiel majore le résultat, et toujours dans le sens qui flatte.
+  // Le « au plus » n'est pas une coquetterie : sans lui, un total calculé sur
+  // deux prix relevés sur douze se lit comme un bénéfice acquis.
+  const prefixeDIncertitude = analyse.nombreDeRessourcesSansPrix > 0 ? "au plus " : "";
 
   const mentionPrixManquants = analyse.nombreDeRessourcesSansPrix > 0
     ? '<div class="precision prix-manquant">' + analyse.nombreDeRessourcesSansPrix
       + " ressource(s) sans prix, total sous-estimé</div>"
     : "";
+
+  // Aucun prix nulle part : il n'y a pas de résultat à afficher, pas même un
+  // approximatif. Un « +0 k » ou un « +120 k » calculé sur des ressources
+  // gratuites serait un mensonge présenté comme un chiffrage.
+  const caseDuResultat = analyse.aucunPrixDeRessourceConnu
+    ? '<div class="case-resultat"><div class="intitule">Résultat de la session</div>'
+      + '<div class="valeur prix-manquant">incalculable</div>'
+      + '<div class="precision prix-manquant">aucun prix de ressource saisi</div></div>'
+    : '<div class="case-resultat"><div class="intitule">Résultat de la session</div>'
+      + '<div class="valeur ' + classeDuProfit + '">' + prefixeDIncertitude + signeDuProfit
+      + formaterMontantEnKamas(analyse.profitTotalDeLaSession) + "</div>"
+      + '<div class="precision">' + etatApplication.craftsDeLaSession.length
+      + " recette(s) en session</div></div>";
 
   // Ce qui est crafté pour les persos a sa propre case, hors du résultat de
   // session. Le mélanger au profit peindrait en rouge une séance saine : une
@@ -86,7 +108,7 @@ function dessinerLeBandeauDeResultats(analyse) {
     : "";
 
   let caseExperience = "";
-  if (analyse.experienceTotaleGagnee > 0) {
+  if (analyse.experienceTotaleGagnee > 0 && !analyse.aucunPrixDeRessourceConnu) {
     const coutParPointDExperience = -analyse.profitTotalDeLaSession / analyse.experienceTotaleGagnee;
     caseExperience =
       '<div class="case-resultat"><div class="intitule">Coût par point d\'XP</div>'
@@ -104,11 +126,7 @@ function dessinerLeBandeauDeResultats(analyse) {
     + '<div class="case-resultat"><div class="intitule">Revenu après taxe</div>'
       + '<div class="valeur">' + formaterMontantEnKamas(analyse.revenuBrutTotal - analyse.taxeTotale) + "</div>"
       + '<div class="precision">taxe de ' + formaterMontantEnKamas(analyse.taxeTotale) + " déduite</div></div>"
-    + '<div class="case-resultat"><div class="intitule">Résultat de la session</div>'
-      + '<div class="valeur ' + classeDuProfit + '">' + signeDuProfit
-      + formaterMontantEnKamas(analyse.profitTotalDeLaSession) + "</div>"
-      + '<div class="precision">' + etatApplication.craftsDeLaSession.length
-      + " recette(s) en session</div></div>"
+    + caseDuResultat
     + caseUsagePersonnel
     + caseExperience;
 }
@@ -153,7 +171,8 @@ function dessinerLesMetiers() {
         + ' telle que le jeu l\'affiche">XP cumulée</label>'
         + '<input data-xp-metier="' + metier.identifiantDuMetier + '" value="'
         + (metier.experienceTotale ? metier.experienceTotale : "") + '" placeholder="ex. 62491"></div>'
-      + '<div class="progression-metier">' + progression + "</div>";
+      + '<div class="progression-metier">' + progression + "</div>"
+      + construireLaPropositionDeCalibrage(metier);
 
     const champ = carte.querySelector("[data-xp-metier]");
     champ.addEventListener("change", () => {
@@ -163,8 +182,95 @@ function dessinerLesMetiers() {
       redessinerToutLEcran();
     });
 
+    brancherLeCalibrageAutomatique(carte, metier);
     conteneurMetiers.appendChild(carte);
   }
+}
+
+
+/* ============================================================
+   CALIBRAGE AUTOMATIQUE : DEUX RELEVÉS VALENT UNE MESURE
+
+   La question « comment le jeu fait-il, lui ? » a une réponse simple : il ne
+   fait rien de plus que compter l'XP totale. C'est nous qui devions apprendre à
+   la lire. Entre deux saisies d'XP cumulée, l'écart est exactement l'XP gagnée,
+   et un lot de crafts en donne le diviseur. Plus rien n'est à taper.
+
+   Le nombre de crafts est PRÉ-REMPLI avec la quantité planifiée de la recette,
+   parce que c'est presque toujours la bonne : Brice a chiffré un lot, il l'a
+   fait. Il reste modifiable, un lot ne se termine pas toujours.
+   ============================================================ */
+
+/** La proposition d'attribution d'un gain d'XP, ou rien s'il n'y a pas de gain. */
+function construireLaPropositionDeCalibrage(metier) {
+  const gain = decrireLeGainDXPAAttribuer(metier.identifiantDuMetier);
+  if (!gain) return "";
+
+  if (gain.craftsCandidats.length === 0) {
+    return '<div class="calibrage-xp attenue">+'
+      + formaterNombreSimple(gain.gain) + " XP depuis ton dernier relevé, "
+      + "mais aucune recette de ce métier en session pour l'attribuer.</div>";
+  }
+
+  const options = gain.craftsCandidats
+    .map(entree => '<option value="' + entree.craft.identifiantDeLigne + '">'
+      + echapperPourHtml(entree.craft.nom) + "</option>")
+    .join("");
+
+  const quantiteProposee = gain.craftsCandidats[0].craft.quantiteACrafter || 1;
+
+  return '<div class="calibrage-xp">'
+    + '<div class="gain-xp">+' + formaterNombreSimple(gain.gain)
+      + ' XP <span class="attenue">depuis ton relevé au niveau '
+      + gain.niveauAuReleve + "</span></div>"
+    + '<div class="ligne-calibrage">'
+      + '<select data-calibrage-recette="oui">' + options + "</select>"
+      + '<input data-calibrage-crafts="oui" value="' + quantiteProposee
+        + '" title="Nombre de crafts faits entre les deux relevés">'
+      + '<button class="bouton-discret" data-calibrage-valider="oui"'
+        + ' title="Attribue ce gain à la recette choisie et calibre son XP par craft">'
+        + "Calibrer</button>"
+    + "</div></div>";
+}
+
+function brancherLeCalibrageAutomatique(carte, metier) {
+  const bouton = carte.querySelector("[data-calibrage-valider]");
+  if (!bouton) return;
+
+  const selecteurDeRecette = carte.querySelector("[data-calibrage-recette]");
+  const champDeCrafts = carte.querySelector("[data-calibrage-crafts]");
+
+  bouton.addEventListener("click", () => {
+    // Le gain est relu au moment du clic plutôt que capturé au dessin : entre
+    // les deux, une autre saisie a pu le changer, et calibrer sur un chiffre
+    // périmé donnerait une mesure fausse sans que rien ne le signale.
+    const gain = decrireLeGainDXPAAttribuer(metier.identifiantDuMetier);
+    if (!gain) return;
+
+    const identifiantDeLigne = selecteurDeRecette.value;
+    const entree = gain.craftsCandidats
+      .find(candidat => candidat.craft.identifiantDeLigne === identifiantDeLigne);
+    const nombreDeCrafts = interpreterSaisieDeMontant(champDeCrafts.value);
+
+    if (!entree || !(nombreDeCrafts > 0)) {
+      annoncer("Il faut une recette et un nombre de crafts pour calibrer.", "echec");
+      return;
+    }
+
+    const resultat = calibrerUneRecetteParLeGain(
+      metier.identifiantDuMetier, entree.craft.identifiantAnkama,
+      gain.gain, nombreDeCrafts, gain.niveauAuReleve);
+
+    if (!resultat) {
+      annoncer("Ce gain ne permet pas d'en tirer une XP par craft.", "echec");
+      return;
+    }
+
+    sauvegarderEtat();
+    annoncer(entree.craft.nom + " calibrée : " + formaterNombreSimple(resultat.xpParCraft)
+      + " XP par craft au niveau " + gain.niveauAuReleve + ".", "succes");
+    redessinerToutLEcran();
+  });
 }
 
 /* ============================================================
@@ -194,14 +300,53 @@ function dessinerLesCraftsDeLaSession(analyse) {
 }
 
 /**
- * Objectif de niveau choisi par carte.
+ * Objectif de niveau choisi par carte, en NOMBRE DE NIVEAUX À GAGNER.
  *
  * Gardé ici et non dans l'état sauvegardé : c'est une question qu'on se pose en
- * regardant l'écran — « et si je montais jusqu'à 60 ? » — pas une propriété du
+ * regardant l'écran — « et si je montais de dix ? » — pas une propriété du
  * craft. La retenir d'une session à l'autre n'apporterait rien et ferait un
  * champ de plus à migrer.
+ *
+ * UNE LIGNE N'Y ENTRE QUE SI BRICE A CHOISI, et c'est ce qui rend le
+ * remplissage automatique supportable : tant que la carte affiche l'objectif
+ * par défaut, la quantité saisie à la main n'est jamais écrasée. Elle ne l'est
+ * qu'à partir du moment où l'objectif devient la source de vérité — et une
+ * saisie manuelle de quantité l'y reprend aussitôt.
  */
 const objectifsParLigne = new Map();
+
+/**
+ * Remplit la quantité des crafts pilotés par un objectif de niveau.
+ *
+ * C'est le geste qui manquait : le compte de crafts s'affichait, et il fallait
+ * le recopier à la main dans le champ de quantité pour que la liste de courses
+ * en tienne compte. Autant dire que l'objectif ne servait à rien.
+ *
+ * Les sous-crafts en sont exclus : leur quantité est déduite de leur parent, la
+ * forcer ici produirait un plan qui ne s'exécute pas.
+ */
+function appliquerLesObjectifsAuxQuantites() {
+  let quelqueChoseAChange = false;
+
+  for (const craft of etatApplication.craftsDeLaSession) {
+    if (craft.identifiantDuCraftParent !== null) continue;
+    const niveauxVises = objectifsParLigne.get(craft.identifiantDeLigne);
+    if (!niveauxVises) continue;
+
+    const bilanDXP = chiffrerLXPDUnCraft(craft, niveauxVises);
+    // Sans calibrage, sans XP restante ou sur un objectif hors d'atteinte, il
+    // n'y a pas de quantité à écrire. La carte dit déjà pourquoi.
+    if (!bilanDXP || !bilanDXP.observationComplete) continue;
+    if (!bilanDXP.montee.atteignable || bilanDXP.montee.nombreDeCrafts <= 0) continue;
+
+    if (craft.quantiteACrafter !== bilanDXP.montee.nombreDeCrafts) {
+      craft.quantiteACrafter = bilanDXP.montee.nombreDeCrafts;
+      quelqueChoseAChange = true;
+    }
+  }
+
+  if (quelqueChoseAChange) sauvegarderEtat();
+}
 
 function dessinerUneCarteDeCraft(noeud, bilan, analyse) {
   const craft = noeud.craft;
@@ -223,7 +368,8 @@ function dessinerUneCarteDeCraft(noeud, bilan, analyse) {
       + construireLeCalibrageDXP(craft, bilanDXP)
       + (bilan.estUnSousCraft ? "" : construireLesChampsDeVente(craft))
     + "</div>"
-    + construireLaLigneDXP(craft, bilanDXP, objectifChoisi)
+    + construireLaLigneDXP(craft, bilanDXP, objectifChoisi,
+        objectifsParLigne.has(craft.identifiantDeLigne) && !bilan.estUnSousCraft)
     + construireLaListeDesIngredients(craft, noeud, analyse.lignesDeRessources)
     + construireLaLigneDeBilan(craft, bilan);
 
@@ -319,10 +465,12 @@ function brancherLesActionsDUneCarte(carte, craft, noeud) {
   if (champDuNiveau) champDuNiveau.addEventListener("change", enregistrerLeCalibrage);
 
   const selecteurDObjectif = carte.querySelector("[data-objectif-xp]");
+  // Choisir un objectif, c'est déclarer que la quantité est désormais dictée
+  // par lui. Le redessin qui suit la remplit.
   if (selecteurDObjectif) {
     selecteurDObjectif.addEventListener("change", () => {
-      const valeur = selecteurDObjectif.value;
-      objectifsParLigne.set(craft.identifiantDeLigne, valeur === "" ? null : parseInt(valeur, 10));
+      objectifsParLigne.set(
+        craft.identifiantDeLigne, parseInt(selecteurDObjectif.value, 10) || 1);
       redessinerToutLEcran();
     });
   }
@@ -332,11 +480,10 @@ function brancherLesActionsDUneCarte(carte, craft, noeud) {
       const nomDuChamp = champ.getAttribute("data-champ");
       const valeur = interpreterSaisieDeMontant(champ.value);
       craft[nomDuChamp] = valeur;
-      // L'XP relevée est mémorisée pour que la recette revienne pré-remplie.
-      // Elle dépend du niveau de métier, donc à corriger après chaque montée.
-      if (nomDuChamp === "experienceParCraft") {
-        etatApplication.memoireExperienceParRecette[craft.identifiantAnkama] = valeur;
-      }
+      // Taper une quantité à la main reprend la main sur l'objectif, sans quoi
+      // le redessin suivant la réécraserait aussitôt — le champ semblerait
+      // alors refuser la saisie, ce qui est la pire des réponses.
+      if (nomDuChamp === "quantiteACrafter") objectifsParLigne.delete(craft.identifiantDeLigne);
       sauvegarderEtat();
       redessinerToutLEcran();
     });

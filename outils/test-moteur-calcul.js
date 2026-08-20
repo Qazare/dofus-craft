@@ -441,6 +441,25 @@ const chaineTrouee = analyserLaSessionComplete();
 verifier("un prix manquant chez l'enfant remonte au parent",
   chaineTrouee.bilansParCraft.find(b => b.identifiantDeLigne === "substrat").auMoinsUnPrixManquant,
   true);
+verifier("mais le coût reste partiellement chiffré, donc affichable",
+  chaineTrouee.bilansParCraft.find(b => b.identifiantDeLigne === "substrat").coutEntierementInconnu,
+  false);
+
+// Aucun prix nulle part : le coût n'est pas « approximatif », il n'existe pas.
+// C'est ce drapeau qui empêche la vue d'annoncer un profit calculé sur des
+// ressources gratuites — le chiffre faux qui pousse à crafter.
+const sessionSansAucunPrix = JSON.parse(JSON.stringify(SESSION_EN_CHAINE));
+sessionSansAucunPrix.basePrixDesRessources = {};
+remplacerLEtat(sessionSansAucunPrix);
+const chaineAveugle = analyserLaSessionComplete();
+const substratAveugle = chaineAveugle.bilansParCraft.find(b => b.identifiantDeLigne === "substrat");
+verifier("sans le moindre prix, le coût est déclaré inconnu",
+  substratAveugle.coutEntierementInconnu, true);
+verifier("et aucun coût n'a été chiffré", substratAveugle.nombreDeCoutsConnus, 0);
+verifier("le compte des prix manquants remonte la chaîne",
+  substratAveugle.nombreDeCoutsManquants, 2);
+verifier("la session entière le dit aussi",
+  chaineAveugle.aucunPrixDeRessourceConnu, true);
 
 console.log("\n--- Structure de l'arbre ---");
 

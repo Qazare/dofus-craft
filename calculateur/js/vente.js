@@ -78,23 +78,73 @@ export function construireLesChampsDeVente(craft) {
   return champs;
 }
 
+/* ============================================================
+   UN CHIFFRE FAUX EST PIRE QUE PAS DE CHIFFRE
+
+   Le coût d'un craft se calcule sur les prix connus, et rien n'obligeait
+   jusqu'ici à dire lesquels manquaient. Conséquence : une ressource sans prix
+   comptait pour zéro kama, le coût sortait trop bas, et le profit trop haut —
+   « crafter fait gagner 12 k par unité » s'affichait alors qu'aucune des trois
+   ressources n'avait de prix. Le chiffre était non seulement faux, il était
+   faux dans le sens qui pousse à crafter.
+
+   Trois régimes, et la vue les traite différemment :
+
+     tout est chiffré     le bilan s'affiche tel quel.
+     une partie manque    les coûts sont MINORÉS et les gains MAJORÉS, donc
+                          annoncés comme tels, avec « au moins » et « au plus ».
+                          L'ordre de grandeur reste utile, le nombre exact non.
+     rien n'est chiffré   il n'y a pas de calcul du tout. On le dit, et on
+                          n'affiche aucun montant.
+   ============================================================ */
+
+/** Mention qui explique en un coup d'œil ce qui manque, ou chaîne vide. */
+function construireLaMentionDePrixManquants(bilan) {
+  if (!bilan.auMoinsUnPrixManquant) return "";
+  const nombre = bilan.nombreDeCoutsManquants;
+  return '<span class="prix-manquant" title="Une ressource sans prix compte pour'
+    + " zéro dans le total : le coût est donc plus bas que la réalité, et le"
+    + ' profit plus haut.">' + nombre + " ressource(s) sans prix</span>";
+}
+
+/**
+ * Bilan d'un craft dont aucune ressource n'a de prix.
+ *
+ * Aucun montant n'y figure, pas même à zéro : un « coût par objet : 0 k » se
+ * lit comme un craft gratuit, ce qui est exactement le contresens à éviter.
+ */
+function construireLeBilanIncalculable(bilan) {
+  return '<div class="bilan-ligne bilan-incalculable">'
+    + '<span class="prix-manquant">Calcul impossible : aucun prix saisi pour les '
+    + bilan.nombreDeCoutsManquants + " ressource(s) de cette recette</span>"
+    + '<span class="attenue">renseigne au moins un prix pour obtenir un ordre de grandeur</span>'
+    + "</div>";
+}
+
 /**
  * Ligne de bilan d'un craft. Trois formulations, parce que trois questions
  * différentes : « combien ça me rapporte », « combien ça me coûte », et dans le
  * cas du lot « comment j'écoule tout ça ».
  */
 export function construireLaLigneDeBilan(craft, bilan) {
+  if (bilan.coutEntierementInconnu) return construireLeBilanIncalculable(bilan);
+
+  // « au moins » sur un coût partiel : ce qui manque ne peut que l'alourdir.
+  const auMoins = bilan.auMoinsUnPrixManquant ? "au moins " : "";
+  const auPlus = bilan.auMoinsUnPrixManquant ? "au plus " : "";
+  const mentionDeManque = construireLaMentionDePrixManquants(bilan);
+
   // Un sous-craft n'a ni destination ni revenu : il est consommé par son
   // parent. Les deux seuls chiffres qui le concernent sont ce qu'il coûte et
   // ce qu'il coûterait de l'acheter tout fait — l'arbitrage de la chaîne.
   if (bilan.estUnSousCraft) {
     return '<div class="bilan-ligne">'
-      + "<span>Coût par objet <strong>" + formaterMontantEnKamas(bilan.coutParObjet) + "</strong></span>"
-      + "<span>Coût de la branche <strong>"
+      + "<span>Coût par objet <strong>" + auMoins
+        + formaterMontantEnKamas(bilan.coutParObjet) + "</strong></span>"
+      + "<span>Coût de la branche <strong>" + auMoins
         + formaterMontantEnKamas(bilan.coutDesRessources) + "</strong></span>"
       + construireLArbitrageCraftOuAchat(bilan)
-      + (bilan.auMoinsUnPrixManquant
-          ? '<span class="prix-manquant">prix de ressource manquant</span>' : "")
+      + mentionDeManque
       + "</div>";
   }
 
@@ -102,11 +152,12 @@ export function construireLaLigneDeBilan(craft, bilan) {
 
   if (destination === DESTINATION_USAGE_PERSONNEL) {
     return '<div class="bilan-ligne">'
-      + "<span>Coût par objet <strong>" + formaterMontantEnKamas(bilan.coutParObjet) + "</strong></span>"
-      + "<span>Coût total <strong>" + formaterMontantEnKamas(bilan.coutDesRessources) + "</strong></span>"
+      + "<span>Coût par objet <strong>" + auMoins
+        + formaterMontantEnKamas(bilan.coutParObjet) + "</strong></span>"
+      + "<span>Coût total <strong>" + auMoins
+        + formaterMontantEnKamas(bilan.coutDesRessources) + "</strong></span>"
       + '<span class="attenue">pour tes persos, hors résultat de session</span>'
-      + (bilan.auMoinsUnPrixManquant
-          ? '<span class="prix-manquant">prix de ressource manquant</span>' : "")
+      + mentionDeManque
       + "</div>";
   }
 
@@ -114,17 +165,17 @@ export function construireLaLigneDeBilan(craft, bilan) {
   const signeDuProfit = bilan.profitTotal >= 0 ? "+" : "";
 
   return '<div class="bilan-ligne">'
-    + "<span>Coût par objet <strong>" + formaterMontantEnKamas(bilan.coutParObjet) + "</strong></span>"
-    + '<span>Profit par objet <strong class="' + classeDuProfit + '">' + signeDuProfit
+    + "<span>Coût par objet <strong>" + auMoins
+      + formaterMontantEnKamas(bilan.coutParObjet) + "</strong></span>"
+    + '<span>Profit par objet <strong class="' + classeDuProfit + '">' + auPlus + signeDuProfit
       + formaterMontantEnKamas(bilan.profitParObjet) + "</strong></span>"
-    + '<span>Total ligne <strong class="' + classeDuProfit + '">' + signeDuProfit
+    + '<span>Total ligne <strong class="' + classeDuProfit + '">' + auPlus + signeDuProfit
       + formaterMontantEnKamas(bilan.profitTotal) + "</strong></span>"
-    + '<span class="attenue">Seuil de revente '
+    + '<span class="attenue">Seuil de revente ' + auMoins
       + formaterMontantEnKamas(bilan.prixDeVenteMinimalPourNePasPerdre)
       + (destination === DESTINATION_VENTE_PAR_LOT ? " l'unité" : "") + "</span>"
     + decrireLEcoulement(destination, bilan)
-    + (bilan.auMoinsUnPrixManquant
-        ? '<span class="prix-manquant">prix de ressource manquant</span>' : "")
+    + mentionDeManque
     + "</div>";
 }
 

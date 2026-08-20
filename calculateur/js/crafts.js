@@ -66,8 +66,6 @@ export async function ajouterUnCraftALaSession(objetRetourneParLApi,
     // Séparé du prix unitaire : basculer d'un mode à l'autre ne doit effacer
     // ni l'un ni l'autre, on compare souvent les deux avant de trancher.
     prixDeVenteParTailleDeLot: {},
-    // Réutilise l'XP déjà relevée pour cette recette lors d'une session précédente.
-    experienceParCraft: etatApplication.memoireExperienceParRecette[objetRetourneParLApi.ankama_id] || 0,
     ingredients: ingredientsResolus
   }));
 

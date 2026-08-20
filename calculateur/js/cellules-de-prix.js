@@ -80,7 +80,7 @@ function habillerLaCelluleRecommandee(nombreDeLots, taille) {
  * ailleurs que sur cette machine. La base ne connaît qu'un prix par ressource et
  * par serveur, le vrai prix relevé au HDV, et c'est celui-là.
  */
-export function construireLaCelluleDuPrixUnitaire(ligne) {
+function construireLePrixUnitaire(ligne) {
   const identifiant = ligne.besoin.identifiantAnkama;
   const fichePrix = etatApplication.basePrixDesRessources[identifiant];
   const prixPersonnel = fichePrix && fichePrix.prixParTailleDeLot
@@ -147,9 +147,34 @@ export function construireLaCelluleDuPrixUnitaire(ligne) {
   const habillage = montantEnQuarantaine > 0
     ? "" : habillerLaCelluleRecommandee(nombreDeLotsRetenus, TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE);
 
-  return "<td" + habillage + ">"
-    + habillerDeLaCocheDeConfirmation(champ, TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE, montantEnQuarantaine)
-    + "</td>";
+  return {
+    habillage,
+    contenu: habillerDeLaCocheDeConfirmation(
+      champ, TAILLE_DE_LOT_PARTAGEE_AVEC_LA_BASE, montantEnQuarantaine)
+  };
+}
+
+/** La colonne ×1 d'un tableau. */
+export function construireLaCelluleDuPrixUnitaire(ligne) {
+  const cellule = construireLePrixUnitaire(ligne);
+  return "<td" + cellule.habillage + ">" + cellule.contenu + "</td>";
+}
+
+/**
+ * Le même champ ×1, hors d'un tableau.
+ *
+ * La liste de courses de la fenêtre flottante n'est plus un tableau, et un
+ * `<td>` posé dans un `<li>` est purement et simplement supprimé par
+ * l'analyseur HTML : le champ disparaîtrait, ou perdrait son habillage. Une
+ * seule fabrique, deux enrobages — c'est la règle qui vaut déjà pour le reste
+ * de ce module.
+ */
+export function construireLaCaseDuPrixUnitaire(ligne) {
+  const cellule = construireLePrixUnitaire(ligne);
+  return "<span" + (cellule.habillage
+      ? cellule.habillage.replace('class="', 'class="case-prix-unitaire ')
+      : ' class="case-prix-unitaire"')
+    + ">" + cellule.contenu + "</span>";
 }
 
 /**

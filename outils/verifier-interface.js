@@ -29,8 +29,11 @@ try {
   process.exit(1);
 }
 
+// L'identifiant est celui d'une VRAIE recette de la table des métiers : sans
+// lui, aucune pastille de métier, aucune carte de métier, et tout le pan XP de
+// l'interface resterait hors du champ du test.
 const RECETTE_DE_TEST = [{
-  ankama_id: 1234, name: "Coiffe du Boufcoul", level: 89,
+  ankama_id: 917, name: "Coiffe du Boufcoul", level: 89,
   image_urls: { icon: "" },
   recipe: [
     { item_ankama_id: 289, item_subtype: "resources", quantity: 6 },
@@ -401,16 +404,107 @@ verifier("et le coût sort du résultat de session",
 await page.selectOption("[data-destination]", "vente-unitaire");
 await page.waitForTimeout(250);
 
-// --- Mode PIP ---
-console.log("\n--- Fenêtre flottante ---");
+// --- XP de métier : calibrage automatique et objectif ---
+//
+// C'est le chemin que Brice suit vraiment : il saisit l'XP cumulée, craft,
+// ressaisit l'XP cumulée, attribue le gain, puis demande « +10 niveaux ». À
+// aucun moment il ne tape une XP par craft, et à la fin la quantité est remplie.
+console.log("\n--- XP de métier, de bout en bout ---");
+
+verifier("la carte du métier apparaît", await page.locator(".carte-metier").count(), 1);
+
+await page.fill("[data-xp-metier]", "15769");
+await page.locator("[data-xp-metier]").dispatchEvent("change");
+await page.waitForTimeout(200);
+verifier("l'XP cumulée donne le niveau",
+  (await page.locator(".carte-metier .niveau-metier").textContent()).trim(), "niveau 40");
+verifier("un premier relevé ne propose aucun calibrage",
+  await page.locator(".calibrage-xp").count(), 0);
+
+await page.fill("[data-xp-metier]", "17369");
+await page.locator("[data-xp-metier]").dispatchEvent("change");
+await page.waitForTimeout(200);
+verifier("le second relevé propose d'attribuer le gain",
+  (await page.locator(".gain-xp").textContent()).replace(/\s/g, ""), "+1600XPdepuistonrelevéauniveau40");
+
+await page.fill("[data-calibrage-crafts]", "10");
+await page.click("[data-calibrage-valider]");
+await page.waitForTimeout(300);
+verifier("la recette est calibrée sans qu'aucune XP n'ait été tapée",
+  await page.inputValue("[data-xp-observee]"), "160");
+verifier("au niveau du relevé de départ",
+  await page.inputValue("[data-niveau-observation]"), "40");
+verifier("le gain attribué ne l'est pas deux fois",
+  await page.locator(".calibrage-xp").count(), 0);
+
+verifier("l'objectif par défaut est +1 niveau",
+  await page.locator("[data-objectif-xp]").inputValue(), "1");
+verifier("trois objectifs, en niveaux à gagner",
+  await page.locator("[data-objectif-xp] option").allTextContents(),
+  ["+1 niveau", "+10 niveaux", "+20 niveaux"]);
+
+await page.selectOption("[data-objectif-xp]", "10");
+await page.waitForTimeout(300);
+const quantiteVisee = await page.inputValue("[data-champ='quantiteACrafter']");
+verifier("choisir un objectif REMPLIT la quantité", Number(quantiteVisee) > 1, true);
+verifier("et la liste de courses suit",
+  Number((await page.locator(".tableau-ressources tbody tr").first()
+    .locator("td.colonne-chiffre").first().textContent()).replace(/\s/g, "")) > 6,
+  true);
+
+// Reprendre la main à la main : sans cela, le redessin suivant écraserait la
+// saisie et le champ semblerait refuser toute quantité.
+await page.fill("[data-champ='quantiteACrafter']", "2");
+await page.locator("[data-champ='quantiteACrafter']").dispatchEvent("change");
+await page.waitForTimeout(300);
+verifier("une quantité tapée à la main reprend la main sur l'objectif",
+  await page.inputValue("[data-champ='quantiteACrafter']"), "2");
+
+// --- Mode PIP : la liste de courses ---
+//
+// L'API Document Picture-in-Picture n'est pas accordée à un Chromium sans
+// interface. On lui en substitue une, qui rend dans une iframe : le code de la
+// fenêtre flottante s'exécute alors pour de vrai, et sa liste est inspectable.
+console.log("\n--- Fenêtre flottante : liste de courses ---");
+
+await page.evaluate(() => {
+  const cadre = document.createElement("iframe");
+  cadre.id = "pip-de-test";
+  // Assez grande pour que rien ne se recouvre : dans le vrai PIP la fenêtre
+  // fait 520 pixels, et une iframe de 300 sur 150 ferait passer le bandeau
+  // par-dessus les cases à cocher.
+  cadre.style.cssText = "width:560px;height:640px;border:0";
+  document.body.appendChild(cadre);
+  Object.defineProperty(window, "documentPictureInPicture", {
+    configurable: true,
+    value: { requestWindow: async () => cadre.contentWindow }
+  });
+});
+
 await page.click("#boutonPictureInPicture");
 await page.waitForTimeout(600);
 
-// Chromium sans interface n'accorde pas l'API Document Picture-in-Picture : on
-// vérifie seulement que le clic ne casse pas la page, le repli en popup étant
-// lui aussi bloqué en mode automatisé.
 verifier("la page survit à l'ouverture du PIP",
   await page.locator("#bandeauResultats").isVisible(), true);
+
+const pip = page.frameLocator("#pip-de-test");
+verifier("la fenêtre flottante affiche une liste, pas un tableau",
+  await pip.locator(".liste-de-courses .ligne-de-courses").count(), 2);
+verifier("aucun tableau de ressources n'y subsiste",
+  await pip.locator(".tableau-ressources").count(), 0);
+verifier("le champ ×1 y est bien un champ, pas une cellule avalée par le parseur",
+  await pip.locator(".ligne-de-courses .champ-prix-lot").count(), 2);
+
+const ligneDeLaLaineDansLePip = pip.locator(".ligne-de-courses", { hasText: "Laine" });
+verifier("le panier à taper au HDV est annoncé",
+  (await ligneDeLaLaineDansLePip.locator(".panier-de-courses").textContent()).includes("×"), true);
+
+await ligneDeLaLaineDansLePip.locator(".coche-achat").check({ force: true });
+await page.waitForTimeout(250);
+verifier("cocher une ressource la sort du chemin",
+  await pip.locator(".ligne-achetee").count(), 1);
+verifier("et le compte des courses le dit",
+  (await pip.locator("#bandeauResultatsCompact").textContent()).includes("1 / 2"), true);
 
 await page.screenshot({ path: join(DOSSIER, "apercu.png"), fullPage: true });
 

@@ -152,16 +152,36 @@ l'XP, le calculateur chiffre l'opération. Ce qu'il fait et que duffus ne fait p
   sur place », où les champs de prix restent saisissables — ce prix-là est celui
   auquel l'objet se vend, donc la moitié de l'arbitrage *le crafter ou l'acheter*,
   l'autre moitié étant son coût de fabrication, affiché à côté.
-- **XP de métier, objectifs et régression.** Tu saisis l'XP cumulée du métier,
-  le niveau s'en déduit par une formule exacte. Sur chaque recette, un relevé
-  unique — l'XP vue *et le niveau où tu l'as vue* — la calibre pour toujours,
-  parce que **l'XP de base est propre à chaque recette** : l'Essence de Batofu et
-  la Potion de Soin sont toutes deux de niveau 40 chez l'Alchimiste et rapportent
-  160 et 40 XP. Choisis alors un objectif, `+1 niveau` ou un palier rond, et le
-  compte de crafts se fait **palier par palier**, en recalculant l'XP à chaque
-  niveau gagné. Ce n'est pas un raffinement : diviser l'XP restante par l'XP d'un
-  craft donne toujours une réponse trop optimiste, puisque la recette rapporte
-  moins à chaque niveau. La ligne annonce aussi le niveau où la recette s'éteint.
+- **XP de métier : tu ne saisis que l'XP cumulée, jamais l'XP par craft.** C'est
+  le seul chiffre que le jeu donne de façon fiable, et il suffit. Saisis-le,
+  craft, ressaisis-le : la carte du métier propose alors d'attribuer le gain à
+  une recette de la session, tu confirmes le nombre de crafts faits, et la
+  recette est calibrée pour toujours. L'écart entre deux relevés EST l'XP par
+  craft — il n'y avait rien d'autre à trouver. Le calibrage doit se faire recette
+  par recette parce que **l'XP de base est propre à chaque recette** : l'Essence
+  de Batofu et la Potion de Soin sont toutes deux de niveau 40 chez l'Alchimiste
+  et rapportent 160 et 40 XP.
+- **Objectif en niveaux à gagner, et la quantité se remplit toute seule.** `+1`,
+  `+10`, `+20` : le compte de crafts se fait **palier par palier**, en
+  recalculant l'XP à chaque niveau gagné, puis **il est écrit dans la quantité du
+  craft** — donc dans la liste de courses, donc dans le coût. Le compte par
+  paliers n'est pas un raffinement : diviser l'XP restante par l'XP d'un craft
+  donne toujours une réponse trop optimiste, puisque la recette rapporte moins à
+  chaque niveau. La ligne annonce aussi le niveau où la recette s'éteint. Taper
+  une quantité à la main reprend la main sur l'objectif.
+- **Aucun chiffre inventé quand un prix manque.** Une ressource sans prix
+  comptait pour zéro : le coût sortait trop bas, le profit trop haut, et
+  « crafter fait gagner 12 k par unité » s'affichait sur une recette dont rien
+  n'était chiffré. Désormais, un coût partiel est annoncé comme tel — « au moins »
+  sur les coûts, « au plus » sur les gains — et l'arbitrage *crafter ou acheter*
+  se tait plutôt que de comparer une moitié de coût à un prix de HDV. Quand aucun
+  prix n'est connu, il n'y a plus de chiffre du tout, seulement « calcul
+  impossible ».
+- **La fenêtre PIP est une liste de courses.** Une ligne par ressource : la case
+  à cocher, la quantité, le nom copiable, **le panier tel qu'il se tape au HDV**
+  (`2 × 100 + 1 × 10`, surachat compris), le prix ×1 saisissable et le coût. Le
+  compte de ce qui reste et les kamas à sortir sont en haut. Les cases cochées ne
+  survivent pas à la fermeture : une liste de courses vaut pour une sortie.
 - **Taxe HDV de 2 %**, modifiable.
 - **Mémoire locale.** Prix, XP par recette et cache des noms d'objets restent
   dans le navigateur, avec export et import JSON. Aucun compte, aucun serveur.
@@ -267,7 +287,7 @@ c'est ce qui permet aux tests d'importer le moteur sans traîner le DOM derrièr
 | `prix-communautaires.js` | Lecture du cache et préséance des prix. Pur. |
 | `arbre-de-crafts.js` | Structure de la chaîne, quantités déduites, ordre de calcul. Pur. |
 | `xp-metier.js` | Formule d'XP, régression, montée palier par palier. Pur. |
-| `xp-session.js` | Ce que l'XP devient une fois branchée sur l'état de la session. |
+| `xp-session.js` | Ce que l'XP devient une fois branchée sur l'état de la session, calibrage par écart de deux relevés compris. |
 | `analyse.js` | Agrégation de la session et quote-part par objet. |
 | `api-dofusdude.js`, `api-prix.js`, `metiers.js` | Les trois accès réseau, et eux seuls. |
 | `journal.js` | Bandeau d'état. Rien ne part au réseau en silence. |
@@ -332,6 +352,12 @@ donc servir le dossier, d'où `outils/servir.js`.
    niveau 40), donc cette régularité était une coïncidence. **Pour trancher :**
    relever la même recette à deux niveaux de métier différents. En attendant,
    l'écran signale les chiffres projetés plutôt qu'observés.
+
+   Depuis le 20 08 2026, ce doute coûte beaucoup moins cher : un recalibrage ne
+   demande plus qu'un second relevé d'XP cumulée, geste qu'on fait de toute
+   façon. La projection ne sert donc que d'appoint entre deux mesures, et
+   relever la même recette à deux niveaux différents — ce qui trancherait la
+   question — arrive maintenant tout seul.
 3. **Emplacement final** du dépôt git, hors de toute synchro de fichiers, et
    choix de l'hébergeur. Comparaison dans `calculateur/DEPLOIEMENT.md`.
    Cloudflare Pages avec Access est le seul moyen gratuit d'avoir une URL qui ne
@@ -388,6 +414,7 @@ d'Alt+Tab.
 | 15 08 2026 | Mode craft en moitié droite pleine hauteur, le client Unity se redimensionne correctement. |
 | 15 08 2026 | Aucun organizer Dofus installé, la bascule de personnage sera ajoutée au script existant. |
 | 15 08 2026 | DofusDB écarté pour cause de licence LPNC-IA, DofusDude retenu. |
+| 20 08 2026 | **L'XP par craft ne se saisit plus, elle se mesure. Schéma 8.** L'écart entre deux relevés d'XP cumulée, divisé par le nombre de crafts faits entre les deux, EST l'XP par craft : `dernierReleveDXPParMetier` garde l'avant-dernier relevé, la carte du métier propose d'attribuer le gain, un clic calibre la recette. C'est la réponse à « comment le jeu fait-il ? » — il ne fait rien de plus que compter l'XP totale, c'est nous qui devions apprendre à la lire. Les objectifs deviennent des niveaux À GAGNER, `+1`, `+10`, `+20`, et **remplissent la quantité du craft** — ils l'affichaient sans jamais l'écrire, donc ils ne servaient à rien. Un prix manquant n'est plus compté pour zéro en silence : coûts annoncés « au moins », gains « au plus », arbitrage crafter-ou-acheter muet plutôt que faux, et « calcul impossible » quand aucun prix n'est connu. La fenêtre PIP devient une liste de courses cochable, avec le panier à taper au HDV. Au passage, un défaut hérité du schéma 7 : `experienceParCraft` avait disparu de l'état mais était encore multiplié dans l'analyse, ce qui donnait `NaN` et faisait disparaître la case « coût par point d'XP ». |
 | 20 08 2026 | XP de métier : XP de base calibrée par un relevé unique plutôt que devinée — les relevés d'Alchimiste montrent qu'elle est propre à chaque recette et qu'aucune formule ne la donnera. Objectifs de niveau comptés palier par palier. Courbe des niveaux mesurée, `10 × L × (L−1)`, qui remplace une table dérivée à la main et fausse d'un facteur deux. Coefficient de régression toujours non confirmé, et signalé comme tel. Les ressources craftées sur place quittent la liste de courses pour une liste à part, prix toujours saisissables. |
 | 20 08 2026 | Chaîne de sous-crafts, avec quantités déduites et coût qui remonte la branche. Métier et niveau requis extraits de Datafus, en MIT, dans un fichier versionné plutôt que par un appel — aucune API ne porte cette donnée, DofusDB reste écarté. Largeur bornée à `150ch`, et copie d'un nom au clic. |
 | 15 08 2026 | Taxe HDV fixée à 2 % du prix de vente. |
