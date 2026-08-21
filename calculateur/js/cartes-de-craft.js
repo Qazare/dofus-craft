@@ -220,10 +220,16 @@ export function construireLArbitrageCraftOuAchat(bilan) {
 export function construireLeCalibrageDXP(craft, bilanDXP) {
   if (!bilanDXP) return "";
 
-  const { observation, recette } = bilanDXP;
+  const { observation } = bilanDXP;
   // Le niveau d'observation est pré-rempli à celui du métier tel qu'il est
   // maintenant : c'est de loin le cas le plus courant, Brice relevant l'XP au
   // moment où il craft.
+  //
+  // ET IL EST ÉCRIT MÊME QUAND L'XP EST ENCORE VIDE. Le laisser vide derrière un
+  // simple indice de saisie avait un effet dévastateur : taper l'XP par craft et
+  // valider enregistrait une observation SANS niveau, donc incalibrable, donc
+  // les objectifs +1/+10/+20 ne remplissaient jamais la quantité — et rien à
+  // l'écran ne disait que le champ d'à côté était le coupable.
   const niveauPropose = observation.niveauMetierObserve || bilanDXP.situation.niveau;
 
   return '<div class="champ-etiquete"><label class="etiquette" title="Se remplit'
@@ -235,9 +241,8 @@ export function construireLeCalibrageDXP(craft, bilanDXP) {
     + '<div class="champ-etiquete"><label class="etiquette" title="Le niveau de métier'
     + ' auquel cette XP a été relevée. Sans lui, le chiffre ne vaut qu\'à ce'
     + ' niveau-là et ne peut être projeté nulle part.">Vue au niveau</label>'
-    + '<input data-niveau-observation="oui" value="'
-    + (observation.xpObservee ? niveauPropose : "")
-    + '" placeholder="' + recette.niveauRequis + '"></div>';
+    + '<input data-niveau-observation="oui" value="' + niveauPropose
+    + '" placeholder="' + niveauPropose + '"></div>';
 }
 
 /**

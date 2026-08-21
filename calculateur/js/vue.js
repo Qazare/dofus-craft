@@ -373,7 +373,7 @@ function dessinerUneCarteDeCraft(noeud, bilan, analyse) {
     + construireLaListeDesIngredients(craft, noeud, analyse.lignesDeRessources)
     + construireLaLigneDeBilan(craft, bilan);
 
-  brancherLesActionsDUneCarte(carte, craft, noeud);
+  brancherLesActionsDUneCarte(carte, craft, noeud, bilanDXP);
   return carte;
 }
 
@@ -397,7 +397,7 @@ function construireLeChampDeQuantite(craft, bilan) {
     + formaterNombreSimple(bilan.quantiteEffective) + "</div></div>";
 }
 
-function brancherLesActionsDUneCarte(carte, craft, noeud) {
+function brancherLesActionsDUneCarte(carte, craft, noeud, bilanDXP) {
   carte.querySelector('[data-action="supprimer"]').addEventListener("click", () => {
     const nombreRetire = retirerUnCraftEtSaDescendance(craft.identifiantDeLigne);
     // La cascade est silencieuse quand elle n'emporte que la carte cliquée, et
@@ -454,9 +454,19 @@ function brancherLesActionsDUneCarte(carte, craft, noeud) {
   // Les deux champs de calibrage vont ensemble : une XP sans son niveau ne se
   // projette nulle part. On enregistre donc la paire, quel que soit celui des
   // deux qui vient d'être modifié.
+  //
+  // UN NIVEAU VIDE RETOMBE SUR CELUI DU MÉTIER, il ne s'enregistre pas à null.
+  // Taper l'XP par craft et laisser le champ voisin intact est le geste normal ;
+  // en tirer une observation sans niveau la rendait inexploitable, et les
+  // objectifs +1/+10/+20 restaient sans effet sur la quantité sans que rien ne
+  // l'explique. Le niveau du métier maintenant est de toute façon la bonne
+  // réponse dans le cas courant — on relève l'XP au moment où l'on craft.
   const enregistrerLeCalibrage = () => {
     const xp = interpreterSaisieDeMontant(champDeLXP.value);
-    const niveau = interpreterSaisieDeMontant(champDuNiveau.value);
+    const niveauSaisi = interpreterSaisieDeMontant(champDuNiveau.value);
+    const niveau = niveauSaisi > 0
+      ? niveauSaisi
+      : (bilanDXP ? bilanDXP.situation.niveau : null);
     enregistrerLObservationDXP(craft.identifiantAnkama, xp, niveau || null);
     sauvegarderEtat();
     redessinerToutLEcran();

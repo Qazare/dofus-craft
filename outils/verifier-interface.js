@@ -460,6 +460,54 @@ await page.waitForTimeout(300);
 verifier("une quantité tapée à la main reprend la main sur l'objectif",
   await page.inputValue("[data-champ='quantiteACrafter']"), "2");
 
+// LE CHEMIN MANUEL, CELUI QUI AVAIT CASSÉ SANS QUE RIEN NE LE DISE
+//
+// Le calibrage automatique remplissait les DEUX champs, donc les tests ci-dessus
+// passaient pendant que le geste courant — taper l'XP par craft et ne pas
+// toucher au champ voisin — enregistrait une observation sans niveau, jamais
+// calibrée, et laissait les objectifs sans effet sur la quantité. On repart donc
+// d'une observation effacée, et on ne touche qu'à l'XP.
+await page.evaluate(() => {
+  const etat = JSON.parse(localStorage.getItem("calculateur-craft-dofus-v1"));
+  etat.memoireExperienceParRecette = {};
+  etat.craftsDeLaSession[0].quantiteACrafter = 1;
+  localStorage.setItem("calculateur-craft-dofus-v1", JSON.stringify(etat));
+});
+await page.reload();
+await page.waitForTimeout(600);
+
+// 42, et non 40 : le niveau proposé est celui du métier MAINTENANT, pas celui
+// du vieux relevé. C'est la bonne réponse dans le cas courant — on relève l'XP
+// au moment où l'on craft.
+verifier("le niveau d'observation est proposé avant toute saisie",
+  await page.inputValue("[data-niveau-observation]"), "42");
+
+await page.fill("[data-xp-observee]", "160");
+await page.locator("[data-xp-observee]").dispatchEvent("change");
+await page.waitForTimeout(300);
+verifier("taper la seule XP par craft suffit à calibrer",
+  await page.evaluate(() => JSON.parse(localStorage.getItem("calculateur-craft-dofus-v1"))
+    .memoireExperienceParRecette["917"].niveauMetierObserve), 42);
+verifier("et la ligne d'XP n'annonce plus une recette non calibrée",
+  await page.locator(".ligne-xp .prix-manquant").count(), 0);
+
+await page.selectOption("[data-objectif-xp]", "20");
+await page.waitForTimeout(300);
+const quantiteApresCalibrageManuel =
+  Number(await page.inputValue("[data-champ='quantiteACrafter']"));
+verifier("+20 remplit la quantité après un calibrage tapé à la main",
+  quantiteApresCalibrageManuel > 1, true);
+verifier("et la quantité est bien celle qu'annonce la ligne d'XP",
+  Number((await page.locator(".ligne-xp strong.accentue").textContent()).replace(/\s/g, "")),
+  quantiteApresCalibrageManuel);
+
+// La suite du fichier chiffre sur une quantité de 2 : on la lui rend, sans quoi
+// un test d'XP ferait échouer un test de fenêtre flottante trois cents lignes
+// plus bas, pour une raison qu'il serait pénible de retrouver.
+await page.fill("[data-champ='quantiteACrafter']", "2");
+await page.locator("[data-champ='quantiteACrafter']").dispatchEvent("change");
+await page.waitForTimeout(300);
+
 // --- Mode PIP : la liste de courses ---
 //
 // L'API Document Picture-in-Picture n'est pas accordée à un Chromium sans
