@@ -416,6 +416,17 @@ input::placeholder { color: #4c574f; }
   color: var(--accent); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px;
 }
 
+/* « Pas encore craftable » : le métier n'est pas au niveau de la recette.
+   Dessinée comme un avertissement, jamais comme une interdiction — la carte
+   reste entièrement vivante, et c'est voulu : comparer ce vers quoi monter est
+   l'usage principal d'une recette hors de portée. D'où le même gabarit que la
+   marque de sous-craft, et une couleur d'alerte plutôt qu'un grisé. */
+.marque-non-craftable {
+  font-size: 9px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--perte); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px;
+  white-space: nowrap;
+}
+
 /* Quantité déduite d'un sous-craft. Volontairement dessinée comme un champ
    sans en être un : même gabarit, même alignement, mais sans bordure vive ni
    curseur de saisie. Un champ grisé inviterait à cliquer dedans. */
@@ -544,6 +555,17 @@ input::placeholder { color: #4c574f; }
   cursor: pointer; margin-left: auto;
 }
 .selecteur-objectif:focus { outline: none; border-color: var(--accent); }
+
+/* Le bouton qui oublie un relevé et rend l'XP au calcul. Dessiné en lien et non
+   en bouton : c'est une correction rare, qui ne doit pas peser autant à l'œil
+   que le sélecteur d'objectif juste à côté. */
+.bouton-lien {
+  font: inherit; font-size: inherit; color: var(--texte-attenue);
+  background: none; border: 0; padding: 0; cursor: pointer;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.bouton-lien:hover { color: var(--accent); }
+.bouton-lien:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 
 /* ---- Rappel des crafts, au-dessus de la liste de courses ----
    La liste agrège les ressources de toutes les recettes et perd ce qu'on est

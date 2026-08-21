@@ -22,7 +22,8 @@ import { lireLaRecetteConnue } from "./metiers.js";
 import {
   deduireLeRatioDepuisUneObservation, calculerLExperienceDUnCraft,
   calculerLeNiveauDepuisLXP, calculerLeSeuilDUnNiveau,
-  calculerLesCraftsPourAtteindreUnNiveau, NIVEAU_MAXIMAL_DUN_METIER
+  calculerLesCraftsPourAtteindreUnNiveau, projeterLeMetierApresDesCrafts,
+  NIVEAU_MAXIMAL_DUN_METIER
 } from "./xp-metier.js";
 
 /* ============================================================
@@ -89,9 +90,12 @@ export function listerLesMetiersDeLaSession() {
  *
  * @param craft            la ligne de craft
  * @param {number|null} niveauxAGagner  nombre de niveaux visés, 1 par défaut
+ * @param {number|null} quantiteEffective  quantité réellement prévue, pour la
+ *        projection. Celle du craft par défaut ; un sous-craft la tient de son
+ *        parent, et la sienne propre ne veut rien dire.
  * @returns {Object|null} null si le métier de la recette est inconnu
  */
-export function chiffrerLXPDUnCraft(craft, niveauxAGagner) {
+export function chiffrerLXPDUnCraft(craft, niveauxAGagner, quantiteEffective) {
   const recette = lireLaRecetteConnue(craft.identifiantAnkama);
   if (!recette) return null;
 
@@ -133,10 +137,39 @@ export function chiffrerLXPDUnCraft(craft, niveauxAGagner) {
     ratioDXP
   });
 
+  // OÙ LE MÉTIER SERA UNE FOIS CES CRAFTS FAITS
+  //
+  // Question inverse de l'objectif, et posée dès que la quantité vient d'ailleurs
+  // que de lui : d'une saisie à la main, d'un stock, d'un budget de ressources.
+  //
+  // Chaque craft est projeté SEUL, depuis le niveau actuel. Deux recettes du même
+  // métier dans la même session ne cumulent donc pas leurs gains à l'écran : dire
+  // « celle-ci te mène au 105 » recette par recette est ce que l'objectif promet
+  // déjà, et additionner les deux exigerait de fixer un ordre de craft qui
+  // n'existe nulle part.
+  const quantiteProjetee = quantiteEffective === undefined || quantiteEffective === null
+    ? craft.quantiteACrafter
+    : quantiteEffective;
+
+  const projection = projeterLeMetierApresDesCrafts({
+    niveauActuel: situation.niveau,
+    experienceActuelle: situation.experienceTotale,
+    nombreDeCrafts: quantiteProjetee,
+    niveauDeLaRecette: recette.niveauRequis,
+    ratioDXP
+  });
+
   return {
     recette,
     situation,
     observation,
+    quantiteProjetee,
+    projection,
+    // Le niveau de métier exigé par l'atelier. Ne bloque rien — comparer la
+    // rentabilité d'une recette qu'on ne peut pas encore faire est un usage
+    // légitime, et souvent la raison de l'ajouter à une session.
+    craftable: situation.niveau >= recette.niveauRequis,
+    niveauxManquantsPourCrafter: Math.max(0, recette.niveauRequis - situation.niveau),
     observationComplete,
     ratioDXP,
     // Vrai quand le chiffre affiché vient d'un relevé de Brice et non du fichier

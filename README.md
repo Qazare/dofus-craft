@@ -179,9 +179,24 @@ l'XP, le calculateur chiffre l'opération. Ce qu'il fait et que duffus ne fait p
     moins, exactement le rapport de 160 à 40 qu'on ne savait pas expliquer.
   - Il apprend aussi ce qu'aucun relevé n'aurait donné sans crafter pour rien :
     **87 recettes ont un ratio nul** et ne rapportent jamais d'XP.
-  - Le champ « XP par craft » **reste, en secours** : laissé vide l'XP est
-    calculée, un chiffre saisi prime. Le calibrage par deux relevés d'XP cumulée
-    fonctionne toujours et remplit ce champ.
+  - Les champs « XP par craft » et « Vue au niveau » ont **disparu des cartes**,
+    faute d'objet. Le relevé reste possible par la carte du métier, qui mesure
+    l'écart entre deux XP cumulées sans rien faire taper : c'est le filet si une
+    mise à jour du jeu écartait la formule. Il **prime** alors sur le calcul, et
+    la ligne d'XP porte de quoi l'oublier d'un clic — service que les deux champs
+    rendaient aussi, et qu'il ne fallait pas perdre avec eux.
+- **La ligne dit où le métier atterrit.** `Après ces crafts : niveau 95 → 105`,
+  calculé palier par palier sur la quantité RÉELLEMENT prévue. Question inverse
+  de l'objectif, et elle vaut autant : la quantité vient souvent d'ailleurs que
+  de lui — d'une saisie à la main, d'un stock, d'un budget de ressources.
+  L'info-bulle donne l'XP gagnée, l'XP d'arrivée et le reste du palier. Chaque
+  recette est projetée seule : deux recettes du même métier ne cumulent pas leurs
+  gains à l'écran, il faudrait fixer un ordre de craft qui n'existe nulle part.
+- **Une recette hors de portée est signalée, jamais bloquée.** `pas encore
+  craftable · 20 niveaux` sur l'en-tête, et rien d'autre ne change : coût,
+  rentabilité et XP restent chiffrés. Comparer ce vers quoi monter est l'usage
+  principal d'une recette qu'on ne peut pas encore faire ; ce que la marque
+  évite, c'est d'acheter au HDV les ressources d'un craft qui ne se lancera pas.
 - **Objectif en niveaux à gagner, et la quantité se remplit toute seule.** `+1`,
   `+10`, `+20` : le compte de crafts se fait **palier par palier**, en
   recalculant l'XP à chaque niveau gagné, puis **il est écrit dans la quantité du
@@ -307,7 +322,7 @@ c'est ce qui permet aux tests d'importer le moteur sans traîner le DOM derrièr
 | `moteur.js` | Programmation dynamique de l'achat. Pur, sans état ni DOM. |
 | `prix-communautaires.js` | Lecture du cache et préséance des prix. Pur. |
 | `arbre-de-crafts.js` | Structure de la chaîne, quantités déduites, ordre de calcul. Pur. |
-| `xp-metier.js` | Formule d'XP, régression, montée palier par palier. Pur. |
+| `xp-metier.js` | Formule d'XP du client, régression, montée palier par palier et projection inverse. Pur. |
 | `xp-session.js` | Ce que l'XP devient une fois branchée sur l'état de la session, calibrage par écart de deux relevés compris. |
 | `analyse.js` | Agrégation de la session et quote-part par objet. |
 | `api-dofusdude.js`, `api-prix.js`, `metiers.js` | Les trois accès réseau, et eux seuls. |
@@ -446,6 +461,7 @@ d'Alt+Tab.
 | 15 08 2026 | Mode craft en moitié droite pleine hauteur, le client Unity se redimensionne correctement. |
 | 15 08 2026 | Aucun organizer Dofus installé, la bascule de personnage sera ajoutée au script existant. |
 | 15 08 2026 | DofusDB écarté pour cause de licence LPNC-IA, DofusDude retenu. |
+| 21 08 2026 | **Les deux champs de calibrage quittent les cartes, la ligne d'XP dit où l'on atterrit, et une recette hors de portée est marquée.** « XP par craft » et « Vue au niveau » n'avaient plus d'objet depuis que l'XP se calcule ; ils rendaient un service annexe, celui d'annuler un relevé, repris par un bouton sur la ligne d'XP — sans quoi un relevé serait resté une valeur imposée que plus rien à l'écran n'explique ni ne défait. **Nouveau :** `Après ces crafts : niveau 95 → 105`, projeté palier par palier sur la quantité réellement prévue, donc valable aussi pour une quantité tapée à la main ; c'est la question inverse de l'objectif, et les tests vérifient qu'elles concordent en enchaînant les deux fonctions plutôt qu'en recopiant des nombres. **Nouveau aussi :** `pas encore craftable · N niveaux` sur l'en-tête quand le métier n'atteint pas le niveau de la recette. Signale sans bloquer, délibérément : comparer ce vers quoi monter est l'usage principal d'une recette hors de portée, et le vrai risque est d'acheter au HDV les ressources d'un craft qui ne se lancera pas. |
 | 21 08 2026 | **L'XP par craft ne se relève plus : elle se calcule, avec la formule du jeu.** `Item.getCraftXpByJobLevel`, dans le client décompilé, donne `floor(20 × niveauRecette / (écart^1,1 / 10 + 1) × craftXpRatio / 100)`. Les six relevés de Brice y tombent tous au point près sans qu'aucun ait servi à l'établir. Le `craftXpRatio` — un champ des fichiers du jeu, porté par l'objet ou par son type — est ce qui manquait quand on avait conclu qu'aucune formule ne donnerait l'XP de base : l'Essence de Batofu est à 20 %, la Potion de Soin à 5 %, et voilà le rapport de 160 à 40 qu'on croyait inexplicable. `extraire-les-metiers.js` lit maintenant `Items` et `ItemTypes` en plus de `Recipes` et écrit le ratio en troisième élément, omis quand il vaut 100 : +4 Ko sur un fichier de 73. **Deux corrections de fond.** La régression n'était pas la linéaire `1 − écart/100` mais `1 / (écart^1,1 / 10 + 1)` — à trente niveaux d'écart, 19 % de l'XP et non 70 %, donc toute montée sur plusieurs paliers était chiffrée trop optimiste. Et 87 recettes ont un ratio nul : elles ne rapportent jamais rien, ce qu'aucun relevé n'aurait appris sans crafter pour rien. Le calibrage manuel reste, en secours, et prime sur le calcul ; il déduit désormais un ratio et non une XP figée, ce qui le rend projetable. |
 | 21 08 2026 | **Les objectifs `+1`/`+10`/`+20` ne remplissaient la quantité que par le chemin automatique.** Le champ « Vue au niveau » restait vide tant qu'aucune XP n'était enregistrée, avec pour seul indice de saisie le niveau de la RECETTE. Taper l'XP par craft et valider — le geste évident — enregistrait donc une observation sans niveau, que rien ne peut projeter : la recette restait « pas encore calibrée » et l'objectif n'écrivait aucune quantité, sans que le champ coupable soit désigné nulle part. Le niveau est maintenant pré-rempli avec celui du métier maintenant, écrit et non suggéré, et un champ vidé y retombe plutôt que de s'enregistrer à `null`. Le test d'interface ne couvrait que le calibrage par deux relevés, qui remplit les deux champs et masquait le défaut ; il couvre désormais le chemin manuel. |
 | 20 08 2026 | **L'XP par craft ne se saisit plus, elle se mesure. Schéma 8.** L'écart entre deux relevés d'XP cumulée, divisé par le nombre de crafts faits entre les deux, EST l'XP par craft : `dernierReleveDXPParMetier` garde l'avant-dernier relevé, la carte du métier propose d'attribuer le gain, un clic calibre la recette. C'est la réponse à « comment le jeu fait-il ? » — il ne fait rien de plus que compter l'XP totale, c'est nous qui devions apprendre à la lire. Les objectifs deviennent des niveaux À GAGNER, `+1`, `+10`, `+20`, et **remplissent la quantité du craft** — ils l'affichaient sans jamais l'écrire, donc ils ne servaient à rien. Un prix manquant n'est plus compté pour zéro en silence : coûts annoncés « au moins », gains « au plus », arbitrage crafter-ou-acheter muet plutôt que faux, et « calcul impossible » quand aucun prix n'est connu. La fenêtre PIP devient une liste de courses cochable, avec le panier à taper au HDV. Au passage, un défaut hérité du schéma 7 : `experienceParCraft` avait disparu de l'état mais était encore multiplié dans l'analyse, ce qui donnait `NaN` et faisait disparaître la case « coût par point d'XP ». |

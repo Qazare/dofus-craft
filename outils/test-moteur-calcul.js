@@ -27,7 +27,7 @@ import { construireLArbreDesCrafts, listerLesObjetsDeLaBranche }
 import { deduireLeRatioDepuisUneObservation, calculerLeFacteurDeRegression,
          calculerLExperienceDUnCraft, calculerLeNiveauDepuisLXP,
          calculerLeSeuilDUnNiveau, calculerLesCraftsPourAtteindreUnNiveau,
-         NIVEAU_MAXIMAL_DUN_METIER }
+         projeterLeMetierApresDesCrafts, NIVEAU_MAXIMAL_DUN_METIER }
   from "../calculateur/js/xp-metier.js";
 import { VERSION_COURANTE_DU_SCHEMA } from "../calculateur/js/config.js";
 
@@ -674,6 +674,76 @@ const monteeImpossible = calculerLesCraftsPourAtteindreUnNiveau({
 });
 verifier("une recette éteinte bloque la montée", monteeImpossible.atteignable, false);
 verifier("et le niveau de blocage est annoncé", monteeImpossible.niveauDeBlocage, 141);
+
+console.log("\n--- Où l'on en sera une fois les crafts faits ---");
+
+/*
+ * La projection est l'inverse exact de l'objectif : si `n` crafts mènent au
+ * niveau `L`, alors projeter `n` crafts doit rendre `L`. C'est la propriété qui
+ * compte, et elle se vérifie en enchaînant les deux fonctions plutôt qu'en
+ * recopiant des nombres calculés à la main.
+ */
+const departDeBrice = { niveauActuel: 40, experienceActuelle: 15769,
+                        niveauDeLaRecette: 40, ratioDXP: 20 };
+
+for (const niveauxAGagner of [1, 5, 10, 20]) {
+  const objectif = calculerLesCraftsPourAtteindreUnNiveau({
+    ...departDeBrice, niveauVise: 40 + niveauxAGagner
+  });
+  const arrivee = projeterLeMetierApresDesCrafts({
+    ...departDeBrice, nombreDeCrafts: objectif.nombreDeCrafts
+  });
+  verifier("les " + objectif.nombreDeCrafts + " crafts de l'objectif +" + niveauxAGagner
+    + " mènent bien au niveau " + (40 + niveauxAGagner),
+    arrivee.niveauFinal, 40 + niveauxAGagner);
+}
+
+// Un craft de moins ne doit PAS suffire : sans cela, le compte de l'objectif
+// serait généreux d'une unité et le test ci-dessus passerait quand même.
+const objectifDeDix = calculerLesCraftsPourAtteindreUnNiveau({
+  ...departDeBrice, niveauVise: 50
+});
+verifier("un craft de moins n'y suffit pas",
+  projeterLeMetierApresDesCrafts({
+    ...departDeBrice, nombreDeCrafts: objectifDeDix.nombreDeCrafts - 1
+  }).niveauFinal, 49);
+
+const arriveePartielle = projeterLeMetierApresDesCrafts({
+  ...departDeBrice, nombreDeCrafts: 2
+});
+verifier("deux crafts ne font pas encore un niveau", arriveePartielle.niveauxGagnes, 0);
+verifier("mais l'XP est bien gagnée", arriveePartielle.experienceGagnee, 320);
+verifier("et le reste du palier suit",
+  arriveePartielle.experienceFinale, 16089);
+
+verifier("sans craft, rien ne bouge",
+  projeterLeMetierApresDesCrafts({ ...departDeBrice, nombreDeCrafts: 0 }).niveauxGagnes, 0);
+
+// Une quantité absurde ne doit ni boucler sans fin ni dépasser le plafond. La
+// boucle avance d'un NIVEAU par tour, donc deux cents tours au pire — et deux
+// bornes l'arrêtent, qu'il faut distinguer.
+//
+// L'extinction de la recette, d'abord : une recette de niveau 40 ne rapporte
+// plus rien passé cent niveaux d'écart, donc elle plafonne au 141 quel que soit
+// le nombre de crafts. C'est la borne qu'on rencontre en vrai.
+verifier("un million de crafts d'une recette 40 plafonnent à son extinction",
+  projeterLeMetierApresDesCrafts({ ...departDeBrice, nombreDeCrafts: 10000000 })
+    .niveauFinal, 141);
+
+// Le niveau maximal ensuite, qu'il faut une recette de haut niveau pour toucher.
+verifier("une recette de niveau 200 mène jusqu'au plafond du métier",
+  projeterLeMetierApresDesCrafts({
+    niveauActuel: 1, experienceActuelle: 0, nombreDeCrafts: 10000000,
+    niveauDeLaRecette: 200, ratioDXP: 100
+  }).niveauFinal, NIVEAU_MAXIMAL_DUN_METIER);
+
+// Une recette éteinte ne fait plus monter, et la boucle doit s'en apercevoir
+// plutôt que de tourner sur un gain nul.
+verifier("une recette éteinte ne fait plus monter",
+  projeterLeMetierApresDesCrafts({
+    niveauActuel: 150, experienceActuelle: calculerLeSeuilDUnNiveau(150),
+    nombreDeCrafts: 100000, niveauDeLaRecette: 40, ratioDXP: 20
+  }).niveauxGagnes, 0);
 
 console.log("\n--- Attribution d'un relevé aux ressources de la session ---");
 

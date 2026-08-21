@@ -67,7 +67,7 @@ export function construireLaPastilleDeMetier(identifiantAnkama) {
  * elle est déduite du parent, la rendre modifiable laisserait croire qu'on peut
  * en produire moins que ce que la recette du dessus consomme.
  */
-export function construireLEnteteDeCraft(craft, bilan) {
+export function construireLEnteteDeCraft(craft, bilan, bilanDXP) {
   const roleDuCraft = bilan.estUnSousCraft
     ? '<span class="marque-sous-craft" title="Consommé par la recette du dessus,'
       + ' jamais vendu">sous-craft</span>'
@@ -78,13 +78,41 @@ export function construireLEnteteDeCraft(craft, bilan) {
     + '<img src="' + echapperPourHtml(craft.adresseIcone) + '" alt="">'
     + "<div>"
       + '<div class="nom-craft">' + construireLeNomCopiable(craft.nom)
-        + construireLaPastilleDeMetier(craft.identifiantAnkama) + "</div>"
+        + construireLaPastilleDeMetier(craft.identifiantAnkama)
+        + construireLaMarqueDeCraftabilite(bilanDXP) + "</div>"
       + '<div class="niveau-craft">Niveau ' + craft.niveau + " · "
         + craft.ingredients.length + " ingrédients · " + roleDuCraft + "</div>"
     + "</div>"
     + '<button class="bouton-discret" data-action="supprimer">'
       + (bilan.estUnSousCraft ? "Acheter plutôt" : "Retirer") + "</button>"
     + "</div>";
+}
+
+/**
+ * La marque « pas encore craftable », quand le métier n'est pas au niveau.
+ *
+ * ELLE SIGNALE, ELLE NE BLOQUE PAS
+ *
+ * Ajouter une recette qu'on ne peut pas encore faire est un usage tout à fait
+ * normal, et souvent le but : on regarde ce que coûtera la montée, on compare
+ * deux paliers, on décide vers quoi tendre. Retirer la carte, griser ses champs
+ * ou refuser le calcul reviendrait à interdire la question la plus utile qu'on
+ * pose à cet écran.
+ *
+ * Ce qui serait fâcheux, c'est de partir au HDV acheter les ressources d'une
+ * recette qu'on ne peut pas lancer. D'où la marque, et le nombre de niveaux qui
+ * manquent — la seule chose qu'on veuille savoir ensuite.
+ */
+function construireLaMarqueDeCraftabilite(bilanDXP) {
+  if (!bilanDXP || bilanDXP.craftable) return "";
+
+  const manquants = bilanDXP.niveauxManquantsPourCrafter;
+  return '<span class="marque-non-craftable" title="Ton métier '
+    + echapperPourHtml(bilanDXP.recette.metier) + " est niveau "
+    + bilanDXP.situation.niveau + ", la recette en demande "
+    + bilanDXP.recette.niveauRequis + ". Elle reste chiffrée : c'est fait pour"
+    + ' comparer ce vers quoi monter.">pas encore craftable · '
+    + manquants + (manquants > 1 ? " niveaux" : " niveau") + "</span>";
 }
 
 /**
@@ -193,58 +221,20 @@ export function construireLArbitrageCraftOuAchat(bilan) {
 /* ============================================================
    EXPÉRIENCE DE MÉTIER
 
-   CE QUE LE JEU DONNE, ET CE QU'IL FAUT EN FAIRE
+   PLUS AUCUN CHAMP : L'XP SE CALCULE
 
-   Dofus n'affiche jamais l'XP de base d'une recette. Il affiche une seule chose
-   de façon fiable et permanente : L'XP CUMULÉE DU MÉTIER. Tout le système est
-   donc bâti là-dessus, et la conséquence est agréable — il n'y a plus rien à
-   taper à la main.
+   Deux champs vivaient ici, « XP par craft » et « Vue au niveau ». Ils étaient
+   la conséquence d'une conclusion fausse — qu'aucune formule ne donnerait l'XP
+   d'une recette — et ils n'ont plus d'objet depuis que le `craftXpRatio` du jeu
+   voyage dans le fichier des métiers : le chiffre est connu dès l'ajout de la
+   recette, sans qu'on ait rien à crafter ni à relever.
 
-     Brice saisit l'XP cumulée du métier, ce qu'il faisait déjà.
-     Il craft, puis ressaisit l'XP cumulée.
-     L'écart divisé par le nombre de crafts EST l'XP par craft, mesurée au
-     niveau du premier relevé. La carte du métier propose l'attribution, un
-     clic la valide, et la recette est calibrée pour toujours.
-
-   Les deux champs ci-dessous restent, mais deviennent un aveu de secours : ils
-   servent à un relevé fait de mémoire, ou à corriger un calibrage. Le chemin
-   normal ne les touche pas.
+   Le relevé reste possible par la carte du métier, qui mesure l'écart entre
+   deux XP cumulées sans rien faire taper. Il PRIME toujours sur le calcul, et
+   la ligne d'XP porte alors de quoi l'oublier — c'est le service que les deux
+   champs rendaient aussi, accessoirement, et qu'il ne fallait pas perdre avec
+   eux.
    ============================================================ */
-
-/**
- * Les deux champs de calibrage, repliés tant qu'ils ne servent pas.
- *
- * Un relevé suffit pour toute la vie de la recette : l'XP de base s'en déduit,
- * et la régression la projette à n'importe quel niveau.
- */
-export function construireLeCalibrageDXP(craft, bilanDXP) {
-  if (!bilanDXP) return "";
-
-  const { observation } = bilanDXP;
-  // Le niveau d'observation est pré-rempli à celui du métier tel qu'il est
-  // maintenant : c'est de loin le cas le plus courant, Brice relevant l'XP au
-  // moment où il craft.
-  //
-  // ET IL EST ÉCRIT MÊME QUAND L'XP EST ENCORE VIDE. Le laisser vide derrière un
-  // simple indice de saisie avait un effet dévastateur : taper l'XP par craft et
-  // valider enregistrait une observation SANS niveau, donc incalibrable, donc
-  // les objectifs +1/+10/+20 ne remplissaient jamais la quantité — et rien à
-  // l'écran ne disait que le champ d'à côté était le coupable.
-  const niveauPropose = observation.niveauMetierObserve || bilanDXP.situation.niveau;
-
-  return '<div class="champ-etiquete"><label class="etiquette" title="Laissé vide,'
-    + " l'XP est calculée depuis les fichiers du jeu et c'est le cas normal. Un"
-    + " chiffre ici PRIME sur le calcul : à ne remplir que si le jeu t'annonce"
-    + ' autre chose.">XP par craft</label>'
-    + '<input data-xp-observee="oui" value="'
-    + (observation.xpObservee ? observation.xpObservee : "")
-    + '" placeholder="auto"></div>'
-    + '<div class="champ-etiquete"><label class="etiquette" title="Le niveau de métier'
-    + ' auquel cette XP a été relevée. Sans lui, le chiffre ne vaut qu\'à ce'
-    + ' niveau-là et ne peut être projeté nulle part.">Vue au niveau</label>'
-    + '<input data-niveau-observation="oui" value="' + niveauPropose
-    + '" placeholder="' + niveauPropose + '"></div>';
-}
 
 /**
  * La ligne d'objectif : ce que la recette rapporte maintenant, et combien il en
@@ -265,10 +255,10 @@ export function construireLaLigneDXP(craft, bilanDXP, niveauxVisesChoisis,
   // calibrer. Un relevé de Brice le remplace quand il en a fait un, et c'est le
   // seul cas où la provenance mérite d'être dite : les deux ne se valent pas.
   const mentionDeProvenance = bilanDXP.ratioVientDUnReleve
-    ? ' <span class="attenue" title="Ce chiffre vient de ton relevé au niveau '
-      + bilanDXP.observation.niveauMetierObserve
-      + ", et non du calcul. Vide le champ « XP par craft » pour revenir au"
-      + ' calcul.">(d\'après ton relevé)</span>'
+    ? ' <button class="bouton-lien" data-oublier-le-releve="oui" title="Ce chiffre'
+      + " vient de ton relevé au niveau " + bilanDXP.observation.niveauMetierObserve
+      + ", et non du calcul. Clique pour l'oublier et revenir au calcul.\">"
+      + "d'après ton relevé ✕</button>"
     : "";
 
   const resume = "<span>" + echapperPourHtml(recette.metier) + " "
@@ -310,6 +300,7 @@ export function construireLaLigneDXP(craft, bilanDXP, niveauxVisesChoisis,
     + '<span title="' + echapperPourHtml(detail) + '">Jusqu\'au niveau '
       + bilanDXP.niveauVise + ' : <strong class="accentue">'
       + formaterNombreSimple(montee.nombreDeCrafts) + "</strong> crafts</span>"
+    + construireLArriveeProjetee(bilanDXP)
     + (quantitePiloteeParLObjectif
         ? '<span class="pastille pastille-objectif" title="La quantité du craft a été'
           + ' mise à ce compte. Tape une quantité toi-même pour reprendre la main.">'
@@ -318,6 +309,43 @@ export function construireLaLigneDXP(craft, bilanDXP, niveauxVisesChoisis,
     + '<span class="attenue" title="Au-delà de cent niveaux d\'écart, la régression'
       + ' annule le gain">s\'éteint au niveau ' + bilanDXP.niveauOuLaRecetteSEteint + "</span>"
     + selecteur + "</div>";
+}
+
+/**
+ * Où le métier atterrit une fois la quantité prévue craftée.
+ *
+ * Se lit à côté du compte de crafts, et ne dit pas la même chose : le compte
+ * répond à l'objectif, celle-ci répond à la QUANTITÉ, qui peut venir d'ailleurs
+ * — d'une saisie à la main, d'un stock, d'un budget. Quand les deux coïncident,
+ * la redondance est utile : elle confirme que la quantité écrite fait bien ce
+ * qu'on lui demande.
+ *
+ * Le reste de palier est donné parce que c'est lui qui décide de la suite : finir
+ * à 20 XP du niveau suivant ou à 1 900 ne se joue pas de la même façon.
+ */
+function construireLArriveeProjetee(bilanDXP) {
+  const { projection, situation, quantiteProjetee } = bilanDXP;
+  if (!(quantiteProjetee > 0) || projection.experienceGagnee <= 0) return "";
+
+  const resteAuPalier = projection.seuilDuNiveauSuivant - projection.experienceFinale;
+  const detailDuPalier = projection.niveauFinal >= 200
+    ? "Niveau maximal atteint."
+    : formaterNombreSimple(resteAuPalier) + " XP resteraient à faire pour le niveau "
+      + (projection.niveauFinal + 1) + ".";
+
+  const titre = "Après les " + formaterNombreSimple(quantiteProjetee)
+    + " crafts prévus : " + formaterNombreSimple(projection.experienceGagnee)
+    + " XP gagnés, soit " + formaterNombreSimple(projection.experienceFinale)
+    + " XP en tout. " + detailDuPalier;
+
+  const gain = projection.niveauxGagnes > 0
+    ? '<strong class="accentue">' + situation.niveau + " → " + projection.niveauFinal + "</strong>"
+    : '<strong>' + situation.niveau + "</strong>";
+
+  return '<span title="' + echapperPourHtml(titre) + '">Après ces crafts : niveau '
+    + gain + (projection.niveauxGagnes > 0
+        ? ""
+        : ' <span class="attenue">(pas encore un niveau)</span>') + "</span>";
 }
 
 function construireLeSelecteurDObjectif(niveauxVisesChoisis, niveauActuel) {

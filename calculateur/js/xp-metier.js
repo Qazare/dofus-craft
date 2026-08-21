@@ -192,6 +192,90 @@ export function deduireLeRatioDepuisUneObservation(
 }
 
 /* ============================================================
+   Où l'on en sera une fois les crafts faits
+   ============================================================ */
+
+/**
+ * Projette le métier après un nombre de crafts donné.
+ *
+ * C'EST LA QUESTION INVERSE DE L'OBJECTIF, ET ELLE VAUT AUTANT
+ *
+ * L'objectif répond à « combien de crafts pour gagner dix niveaux ». Celle-ci
+ * répond à « et si j'en fais ces 72, je serai où ? » — la question qu'on se pose
+ * dès que la quantité vient d'ailleurs que de l'objectif : d'une saisie à la
+ * main, d'un lot qu'on a déjà en stock, d'un budget de ressources.
+ *
+ * Le calcul avance PALIER PAR PALIER, comme son symétrique, et pour la même
+ * raison : l'XP par craft baisse à chaque niveau gagné. Multiplier la quantité
+ * par l'XP d'aujourd'hui surestimerait le résultat, d'autant plus que la montée
+ * est longue.
+ *
+ * @param {Object} situation
+ *   @param {number} situation.niveauActuel
+ *   @param {number} situation.experienceActuelle   XP cumulée, pas celle du palier
+ *   @param {number} situation.nombreDeCrafts
+ *   @param {number} situation.niveauDeLaRecette
+ *   @param {number} situation.ratioDXP
+ * @returns {{niveauFinal:number, experienceFinale:number, experienceGagnee:number,
+ *            niveauxGagnes:number, xpDansLePalierFinal:number,
+ *            seuilDuNiveauSuivant:number}}
+ */
+export function projeterLeMetierApresDesCrafts(situation) {
+  const { niveauActuel, experienceActuelle, nombreDeCrafts,
+          niveauDeLaRecette, ratioDXP } = situation;
+
+  let experience = Math.max(experienceActuelle || 0, calculerLeSeuilDUnNiveau(niveauActuel));
+  let niveau = niveauActuel;
+  let craftsRestants = Math.max(0, Math.floor(nombreDeCrafts || 0));
+
+  // La boucle avance d'un NIVEAU à la fois, pas d'un craft : une quantité de
+  // cent mille crafts se projette donc en deux cents tours au pire, et non en
+  // cent mille. La borne du niveau maximal la termine dans tous les cas.
+  while (craftsRestants > 0 && niveau < NIVEAU_MAXIMAL_DUN_METIER) {
+    const xpParCraft = calculerLExperienceDUnCraft(niveau, niveauDeLaRecette, ratioDXP);
+    // La recette ne rapporte plus rien : les crafts restants ne feront pas
+    // monter d'un point, et boucler dessus ne finirait jamais.
+    if (xpParCraft <= 0) break;
+
+    const seuilSuivant = calculerLeSeuilDUnNiveau(niveau + 1);
+    const craftsPourLeNiveau = Math.ceil((seuilSuivant - experience) / xpParCraft);
+
+    if (craftsPourLeNiveau > craftsRestants) {
+      experience += craftsRestants * xpParCraft;
+      craftsRestants = 0;
+      break;
+    }
+
+    experience += craftsPourLeNiveau * xpParCraft;
+    craftsRestants -= craftsPourLeNiveau;
+    niveau++;
+  }
+
+  // Les crafts encore en main alors que le niveau maximal est atteint, ou que la
+  // recette s'est éteinte, rapportent quand même leur XP — elle ne fait
+  // simplement plus monter de niveau.
+  if (craftsRestants > 0 && niveau >= NIVEAU_MAXIMAL_DUN_METIER) {
+    experience += craftsRestants
+      * calculerLExperienceDUnCraft(niveau, niveauDeLaRecette, ratioDXP);
+  }
+
+  const seuilDuNiveauFinal = calculerLeSeuilDUnNiveau(niveau);
+  const seuilSuivant = niveau >= NIVEAU_MAXIMAL_DUN_METIER
+    ? seuilDuNiveauFinal
+    : calculerLeSeuilDUnNiveau(niveau + 1);
+
+  return {
+    niveauFinal: niveau,
+    experienceFinale: experience,
+    experienceGagnee: experience - Math.max(experienceActuelle || 0,
+      calculerLeSeuilDUnNiveau(niveauActuel)),
+    niveauxGagnes: niveau - niveauActuel,
+    xpDansLePalierFinal: experience - seuilDuNiveauFinal,
+    seuilDuNiveauSuivant: seuilSuivant
+  };
+}
+
+/* ============================================================
    Combien de crafts pour atteindre un niveau
    ============================================================ */
 

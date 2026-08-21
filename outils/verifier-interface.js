@@ -443,12 +443,27 @@ verifier("le second relevé propose d'attribuer le gain",
 await page.fill("[data-calibrage-crafts]", "10");
 await page.click("[data-calibrage-valider]");
 await page.waitForTimeout(300);
-verifier("la recette est calibrée sans qu'aucune XP n'ait été tapée",
-  await page.inputValue("[data-xp-observee]"), "160");
-verifier("au niveau du relevé de départ",
-  await page.inputValue("[data-niveau-observation]"), "40");
 verifier("le gain attribué ne l'est pas deux fois",
   await page.locator(".calibrage-xp").count(), 0);
+
+// LE RELEVÉ PRIME, ET IL DOIT POUVOIR ÊTRE DÉFAIT
+//
+// Les deux champs de calibrage ont disparu de la carte : l'XP se calcule, ils
+// n'avaient plus d'objet. Ils servaient aussi de bouton d'annulation, et c'est
+// ce service-là qu'il ne fallait pas perdre — sans quoi un relevé resterait une
+// valeur imposée que plus rien à l'écran n'explique ni ne défait.
+verifier("les champs de calibrage ont bien disparu de la carte",
+  await page.locator("[data-xp-observee], [data-niveau-observation]").count(), 0);
+verifier("le relevé prend le pas sur le calcul, et le dit",
+  await page.locator("[data-oublier-le-releve]").count(), 1);
+
+const xpAvecReleve = await page.locator(".ligne-xp").innerText();
+await page.click("[data-oublier-le-releve]");
+await page.waitForTimeout(300);
+verifier("l'oublier rend l'XP au calcul",
+  await page.locator("[data-oublier-le-releve]").count(), 0);
+verifier("et le chiffre change donc",
+  (await page.locator(".ligne-xp").innerText()) !== xpAvecReleve, true);
 
 verifier("l'objectif par défaut est +1 niveau",
   await page.locator("[data-objectif-xp]").inputValue(), "1");
@@ -473,53 +488,77 @@ await page.waitForTimeout(300);
 verifier("une quantité tapée à la main reprend la main sur l'objectif",
   await page.inputValue("[data-champ='quantiteACrafter']"), "2");
 
-// LE CHEMIN MANUEL, CELUI QUI AVAIT CASSÉ SANS QUE RIEN NE LE DISE
+// OÙ LE MÉTIER ATTERRIT UNE FOIS LES CRAFTS FAITS
 //
-// Le calibrage automatique remplissait les DEUX champs, donc les tests ci-dessus
-// passaient pendant que le geste courant — taper l'XP par craft et ne pas
-// toucher au champ voisin — enregistrait une observation sans niveau, jamais
-// calibrée, et laissait les objectifs sans effet sur la quantité. On repart donc
-// d'une observation effacée, et on ne touche qu'à l'XP.
+// Question inverse de l'objectif : le compte de crafts répond à « combien pour
+// dix niveaux », la projection répond à « et si j'en fais ces 26, je serai où ».
+// Les deux doivent concorder quand la quantité vient de l'objectif — c'est ce
+// qui prouve que la quantité écrite fait bien ce qu'on lui demande.
+await page.selectOption("[data-objectif-xp]", "10");
+await page.waitForTimeout(300);
+const niveauCourant = Number(
+  (await page.locator(".carte-metier .niveau-metier").textContent()).replace(/\D/g, ""));
+const ligneProjetee = await page.locator(".ligne-xp").innerText();
+
+verifier("la ligne annonce où l'on arrivera",
+  /Après ces crafts : niveau/.test(ligneProjetee), true);
+verifier("et l'arrivée est bien le niveau visé par l'objectif",
+  ligneProjetee.includes(niveauCourant + " → " + (niveauCourant + 10)), true);
+
+// Une quantité tapée à la main doit reprojeter, sinon la projection ne servirait
+// qu'à confirmer l'objectif — ce qui est le cas où elle apprend le moins. Ici la
+// recette est de niveau 89 pour un métier au 42 : elle rapporte le plein, donc
+// un seul craft suffit à passer un niveau, et l'arrivée doit chuter en
+// conséquence.
+await page.fill("[data-champ='quantiteACrafter']", "1");
+await page.locator("[data-champ='quantiteACrafter']").dispatchEvent("change");
+await page.waitForTimeout(300);
+const projectionDUnSeulCraft = await page.locator(".ligne-xp").innerText();
+verifier("une quantité tapée à la main reprojette l'arrivée",
+  projectionDUnSeulCraft.includes(niveauCourant + " → " + (niveauCourant + 10)), false);
+verifier("et elle annonce toujours une arrivée",
+  /Après ces crafts : niveau/.test(projectionDUnSeulCraft), true);
+
+// Quantité nulle : il n'y a pas d'arrivée à annoncer, et prétendre le contraire
+// afficherait « niveau 42 → 42 » sur une ligne qui ne prévoit aucun craft.
+await page.fill("[data-champ='quantiteACrafter']", "0");
+await page.locator("[data-champ='quantiteACrafter']").dispatchEvent("change");
+await page.waitForTimeout(300);
+verifier("sans craft prévu, aucune arrivée n'est annoncée",
+  /Après ces crafts/.test(await page.locator(".ligne-xp").innerText()), false);
+
+// CRAFTABLE OU PAS : ON SIGNALE, ON NE BLOQUE PAS
+//
+// Ajouter une recette hors de portée est un usage normal, et souvent le but :
+// on regarde ce que coûterait la montée avant de s'y engager. La marque doit
+// donc apparaître SANS que rien ne se ferme — ni la quantité, ni les prix, ni
+// le chiffrage. Le risque à couvrir est l'inverse : partir au HDV acheter les
+// ressources d'une recette qu'on ne peut pas lancer.
 await page.evaluate(() => {
   const etat = JSON.parse(localStorage.getItem("calculateur-craft-dofus-v1"));
-  etat.memoireExperienceParRecette = {};
-  etat.craftsDeLaSession[0].quantiteACrafter = 1;
+  // Métier au 42, recette de niveau 89 : quarante-sept niveaux manquent.
+  etat.craftsDeLaSession[0].quantiteACrafter = 2;
   localStorage.setItem("calculateur-craft-dofus-v1", JSON.stringify(etat));
 });
 await page.reload();
 await page.waitForTimeout(600);
 
-// 42, et non 40 : le niveau proposé est celui du métier MAINTENANT, pas celui
-// du vieux relevé. C'est la bonne réponse dans le cas courant — on relève l'XP
-// au moment où l'on craft.
-verifier("le niveau d'observation est proposé avant toute saisie",
-  await page.inputValue("[data-niveau-observation]"), "42");
+verifier("une recette hors de portée est marquée",
+  await page.locator(".marque-non-craftable").count(), 1);
+verifier("et la marque dit combien de niveaux manquent",
+  (await page.locator(".marque-non-craftable").textContent()).includes("47"), true);
+verifier("mais la quantité reste saisissable",
+  await page.isEditable("[data-champ='quantiteACrafter']"), true);
+verifier("et le chiffrage reste fait",
+  /XP par craft/.test(await page.locator(".ligne-xp").innerText()), true);
 
-await page.fill("[data-xp-observee]", "160");
-await page.locator("[data-xp-observee]").dispatchEvent("change");
+// Une fois le métier au niveau, la marque disparaît. Sans cette moitié-là, un
+// marqueur collé en permanence passerait le test ci-dessus.
+await page.fill("[data-xp-metier]", "160000");
+await page.locator("[data-xp-metier]").dispatchEvent("change");
 await page.waitForTimeout(300);
-verifier("taper la seule XP par craft suffit à calibrer",
-  await page.evaluate(() => JSON.parse(localStorage.getItem("calculateur-craft-dofus-v1"))
-    .memoireExperienceParRecette["917"].niveauMetierObserve), 42);
-verifier("et la ligne d'XP n'annonce plus une recette non calibrée",
-  await page.locator(".ligne-xp .prix-manquant").count(), 0);
-
-await page.selectOption("[data-objectif-xp]", "20");
-await page.waitForTimeout(300);
-const quantiteApresCalibrageManuel =
-  Number(await page.inputValue("[data-champ='quantiteACrafter']"));
-verifier("+20 remplit la quantité après un calibrage tapé à la main",
-  quantiteApresCalibrageManuel > 1, true);
-verifier("et la quantité est bien celle qu'annonce la ligne d'XP",
-  Number((await page.locator(".ligne-xp strong.accentue").textContent()).replace(/\s/g, "")),
-  quantiteApresCalibrageManuel);
-
-// La suite du fichier chiffre sur une quantité de 2 : on la lui rend, sans quoi
-// un test d'XP ferait échouer un test de fenêtre flottante trois cents lignes
-// plus bas, pour une raison qu'il serait pénible de retrouver.
-await page.fill("[data-champ='quantiteACrafter']", "2");
-await page.locator("[data-champ='quantiteACrafter']").dispatchEvent("change");
-await page.waitForTimeout(300);
+verifier("au niveau requis, plus de marque",
+  await page.locator(".marque-non-craftable").count(), 0);
 
 // UNE RECETTE QUI NE RAPPORTE JAMAIS RIEN
 //

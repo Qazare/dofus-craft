@@ -175,10 +175,11 @@
   <strong>87 recettes ont un ratio nul</strong> et ne rapportent jamais d'XP, à aucun niveau. La
   ligne le dit avant que tu t'y lances.</p>
 
-  <p>Le champ <em>XP par craft</em> reste, en secours. Laissé vide — le cas normal — l'XP est
-  calculée. Un chiffre saisi <strong>prime</strong> sur le calcul : c'est le filet si une mise à
-  jour du jeu venait à écarter la formule. Le calibrage par deux relevés d'XP cumulée fonctionne
-  toujours et remplit ce champ pour toi.</p>
+  <p>Les champs <em>XP par craft</em> et <em>Vue au niveau</em> ont donc disparu des cartes : ils
+  n'avaient plus d'objet. Le relevé reste possible par la carte du métier, qui mesure l'écart entre
+  deux XP cumulées sans rien te faire taper — c'est le filet si une mise à jour du jeu venait à
+  écarter la formule. Il <strong>prime</strong> alors sur le calcul, et la ligne d'XP porte de quoi
+  l'oublier d'un clic.</p>
 
   <p><strong>L'objectif se compte en niveaux à gagner, et remplit la quantité.</strong>
   <em>+1</em>, <em>+10</em>, <em>+20</em> : le compte de crafts se fait palier par palier, en
@@ -187,6 +188,21 @@
   donc dans la liste de courses et dans le coût. Taper une quantité toi-même reprend la main.
   L'info-bulle montre le détail palier par palier, et la ligne annonce le niveau où la recette
   s'éteint.</p>
+
+  <p><strong>Et la ligne dit où tu atterris.</strong> <em>Après ces crafts : niveau 95 → 105</em>.
+  C'est la question inverse de l'objectif, et elle vaut autant : la quantité ne vient pas toujours
+  de lui, elle peut venir d'une saisie à la main, d'un stock que tu as déjà, ou d'un budget de
+  ressources. L'info-bulle donne l'XP gagnée, l'XP totale d'arrivée et ce qui resterait à faire
+  pour le niveau d'après — finir à 20 XP du suivant ou à 1 900 ne se joue pas pareil. Chaque
+  recette est projetée seule, depuis ton niveau actuel : deux recettes du même métier ne cumulent
+  pas leurs gains à l'écran, il faudrait fixer un ordre de craft qui n'existe nulle part.</p>
+
+  <p><strong>Une recette hors de portée est signalée, jamais bloquée.</strong> Si ton métier est au
+  40 et la recette au 60, la carte porte <em>pas encore craftable · 20 niveaux</em> — et rien
+  d'autre ne change : le coût, la rentabilité et l'XP restent chiffrés. C'est voulu, parce que
+  comparer ce vers quoi monter est l'usage principal d'une recette qu'on ne peut pas encore faire.
+  Ce que la marque évite, c'est de partir au HDV acheter les ressources d'un craft qui ne se
+  lancera pas.</p>
 
   <p><strong>La courbe des niveaux, elle, est exacte.</strong> Un palier coûte <em>20 × niveau</em>,
   donc atteindre le niveau L demande <em>10 × L × (L−1)</em> XP en tout — 16 400 pour le niveau 41,

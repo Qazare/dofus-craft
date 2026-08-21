@@ -20,7 +20,7 @@ import { construireLeSelecteurDeDestination, construireLesChampsDeVente,
 import { construireLaPastilleDeQuarantaine } from "./cellules-de-prix.js";
 import { construireLEnteteDeCraft, construireLaListeDesIngredients,
          construireLArbitrageCraftOuAchat, construireLeNomCopiable,
-         construireLaPastilleDeMetier, construireLeCalibrageDXP,
+         construireLaPastilleDeMetier,
          construireLaLigneDXP } from "./cartes-de-craft.js";
 import { chiffrerLXPDUnCraft, listerLesMetiersDeLaSession,
          decrireLeGainDXPAAttribuer, calibrerUneRecetteParLeGain } from "./xp-session.js";
@@ -352,7 +352,8 @@ function appliquerLesObjectifsAuxQuantites() {
 
 function dessinerUneCarteDeCraft(noeud, bilan, analyse) {
   const craft = noeud.craft;
-  const bilanDXP = chiffrerLXPDUnCraft(craft, objectifsParLigne.get(craft.identifiantDeLigne));
+  const bilanDXP = chiffrerLXPDUnCraft(craft,
+    objectifsParLigne.get(craft.identifiantDeLigne), bilan.quantiteEffective);
   const objectifChoisi = objectifsParLigne.get(craft.identifiantDeLigne);
 
   const carte = document.createElement("div");
@@ -363,11 +364,10 @@ function dessinerUneCarteDeCraft(noeud, bilan, analyse) {
   carte.style.setProperty("--profondeur", String(noeud.profondeur));
 
   carte.innerHTML =
-    construireLEnteteDeCraft(craft, bilan)
+    construireLEnteteDeCraft(craft, bilan, bilanDXP)
     + '<div class="grille-champs-craft">'
       + construireLeChampDeQuantite(craft, bilan)
       + (bilan.estUnSousCraft ? "" : construireLeSelecteurDeDestination(craft))
-      + construireLeCalibrageDXP(craft, bilanDXP)
       + (bilan.estUnSousCraft ? "" : construireLesChampsDeVente(craft))
     + "</div>"
     + construireLaLigneDXP(craft, bilanDXP, objectifChoisi,
@@ -450,31 +450,19 @@ function brancherLesActionsDUneCarte(carte, craft, noeud, bilanDXP) {
     });
   }
 
-  const champDeLXP = carte.querySelector("[data-xp-observee]");
-  const champDuNiveau = carte.querySelector("[data-niveau-observation]");
-
-  // Les deux champs de calibrage vont ensemble : une XP sans son niveau ne se
-  // projette nulle part. On enregistre donc la paire, quel que soit celui des
-  // deux qui vient d'être modifié.
-  //
-  // UN NIVEAU VIDE RETOMBE SUR CELUI DU MÉTIER, il ne s'enregistre pas à null.
-  // Taper l'XP par craft et laisser le champ voisin intact est le geste normal ;
-  // en tirer une observation sans niveau la rendait inexploitable, et les
-  // objectifs +1/+10/+20 restaient sans effet sur la quantité sans que rien ne
-  // l'explique. Le niveau du métier maintenant est de toute façon la bonne
-  // réponse dans le cas courant — on relève l'XP au moment où l'on craft.
-  const enregistrerLeCalibrage = () => {
-    const xp = interpreterSaisieDeMontant(champDeLXP.value);
-    const niveauSaisi = interpreterSaisieDeMontant(champDuNiveau.value);
-    const niveau = niveauSaisi > 0
-      ? niveauSaisi
-      : (bilanDXP ? bilanDXP.situation.niveau : null);
-    enregistrerLObservationDXP(craft.identifiantAnkama, xp, niveau || null);
-    sauvegarderEtat();
-    redessinerToutLEcran();
-  };
-  if (champDeLXP) champDeLXP.addEventListener("change", enregistrerLeCalibrage);
-  if (champDuNiveau) champDuNiveau.addEventListener("change", enregistrerLeCalibrage);
+  // Un relevé qui prend le pas sur le calcul doit pouvoir être défait, sans quoi
+  // il resterait une valeur imposée que plus aucun champ à l'écran n'explique.
+  // C'est la contrepartie d'avoir retiré les deux champs de calibrage : ils
+  // servaient aussi, accessoirement, de bouton d'annulation.
+  const boutonDeRetourAuCalcul = carte.querySelector("[data-oublier-le-releve]");
+  if (boutonDeRetourAuCalcul) {
+    boutonDeRetourAuCalcul.addEventListener("click", () => {
+      enregistrerLObservationDXP(craft.identifiantAnkama, 0, null);
+      sauvegarderEtat();
+      annoncer("Relevé oublié, l'XP repasse au calcul.", "succes");
+      redessinerToutLEcran();
+    });
+  }
 
   const selecteurDObjectif = carte.querySelector("[data-objectif-xp]");
   // Choisir un objectif, c'est déclarer que la quantité est désormais dictée
