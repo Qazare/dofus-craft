@@ -22,7 +22,8 @@ import { construireLEnteteDeCraft, construireLaListeDesIngredients,
          construireLArbitrageCraftOuAchat, construireLeNomCopiable,
          construireLaPastilleDeMetier,
          construireLaLigneDXP } from "./cartes-de-craft.js";
-import { chiffrerLXPDUnCraft, listerLesMetiersDeLaSession,
+import { chiffrerLXPDUnCraft, listerLesMetiersDeLaSession, chainerLXPDeLaSession,
+         lireLArriveeDeChaqueMetier,
          decrireLeGainDXPAAttribuer, calibrerUneRecetteParLeGain } from "./xp-session.js";
 import { crafterUneRessourceSurPlace, retirerUnCraftEtSaDescendance } from "./crafts.js";
 import { lireLaRecetteConnue } from "./metiers.js";
@@ -54,6 +55,13 @@ export function enregistrerLeRedessinSecondaire(fonction) {
 }
 
 export function redessinerToutLEcran() {
+  // Le chaînage est calculé UNE FOIS par redessin, et sert deux fois : à décider
+  // des quantités, puis à dessiner chaque carte au niveau où ses prédécesseurs
+  // l'ont amenée. Le recalculer entre les deux risquerait de le faire diverger,
+  // et l'écran annoncerait un compte de crafts qui ne mène pas au niveau affiché
+  // juste à côté.
+  chaineDeLaSession = chainerLXPDeLaSession(objectifsParLigne);
+
   // Les objectifs de niveau pilotent la quantité, donc ils s'appliquent AVANT
   // l'analyse : la remplir après coup afficherait un chiffrage fait sur
   // l'ancienne quantité, et il faudrait un second passage pour le rattraper.
@@ -155,6 +163,11 @@ function dessinerLesMetiers() {
 
   conteneurMetiers.innerHTML = "";
 
+  // Où chaque métier finira si toute la session est craftée. L'XP réelle reste
+  // celle du champ, et n'est jamais réécrite : c'est bien une projection posée
+  // À CÔTÉ d'elle, jamais à sa place.
+  const arriveeParMetier = lireLArriveeDeChaqueMetier(objectifsParLigne);
+
   for (const metier of metiers) {
     const carte = document.createElement("div");
     carte.className = "carte-metier";
@@ -164,6 +177,19 @@ function dessinerLesMetiers() {
       : '<span class="attenue">' + formaterNombreSimple(metier.xpRestantePourLeNiveau)
         + " XP pour le niveau " + (metier.niveau + 1) + "</span>";
 
+    // L'arrivée n'est montrée que si la session fait réellement gagner un
+    // niveau. « 40 → 40 » n'apprendrait rien et ferait douter du reste.
+    const arrivee = arriveeParMetier.get(metier.identifiantDuMetier);
+    const ligneDArrivee = arrivee && arrivee.niveauFinal > metier.niveau
+      ? '<div class="arrivee-metier" title="Si tu fais tous les crafts prévus dans'
+        + " cette session, dans l'ordre des cartes. Ton XP réelle ci-dessus n'est"
+        + " pas touchée. Les sous-crafts ne sont pas comptés, donc l'arrivée est"
+        + ' prudente plutôt qu\'optimiste.">après la session : niveau <strong'
+        + ' class="accentue">' + arrivee.niveauFinal + "</strong>"
+        + '<span class="attenue"> · ' + formaterNombreSimple(arrivee.experienceFinale)
+        + " XP</span></div>"
+      : "";
+
     carte.innerHTML =
       '<div class="entete-metier"><strong>' + echapperPourHtml(metier.nom) + "</strong>"
         + '<span class="niveau-metier">niveau ' + metier.niveau + "</span></div>"
@@ -172,6 +198,7 @@ function dessinerLesMetiers() {
         + '<input data-xp-metier="' + metier.identifiantDuMetier + '" value="'
         + (metier.experienceTotale ? metier.experienceTotale : "") + '" placeholder="ex. 62491"></div>'
       + '<div class="progression-metier">' + progression + "</div>"
+      + ligneDArrivee
       + construireLaPropositionDeCalibrage(metier);
 
     const champ = carte.querySelector("[data-xp-metier]");
@@ -316,6 +343,17 @@ function dessinerLesCraftsDeLaSession(analyse) {
 const objectifsParLigne = new Map();
 
 /**
+ * Le chaînage du redessin en cours : par ligne, l'XP de métier d'où ce craft
+ * part et la quantité que son objectif réclame.
+ *
+ * Gardé ici plutôt que passé de fonction en fonction parce qu'il traverse tout
+ * le dessin d'un écran — les quantités, les cartes, les métiers — et qu'il est
+ * recalculé en entier à chaque redessin. Le porter en argument à travers cinq
+ * niveaux d'appel n'ajouterait rien qu'une signature de plus.
+ */
+let chaineDeLaSession = new Map();
+
+/**
  * Remplit la quantité des crafts pilotés par un objectif de niveau.
  *
  * C'est le geste qui manquait : le compte de crafts s'affichait, et il fallait
@@ -330,19 +368,15 @@ function appliquerLesObjectifsAuxQuantites() {
 
   for (const craft of etatApplication.craftsDeLaSession) {
     if (craft.identifiantDuCraftParent !== null) continue;
-    const niveauxVises = objectifsParLigne.get(craft.identifiantDeLigne);
-    if (!niveauxVises) continue;
 
-    const bilanDXP = chiffrerLXPDUnCraft(craft, niveauxVises);
-    // Sur une recette qui ne rapporte rien ou un objectif hors d'atteinte, il
-    // n'y a pas de quantité à écrire. La carte dit déjà pourquoi. Le calibrage,
-    // lui, n'est plus une condition : l'XP se calcule sans qu'on relève quoi que
-    // ce soit depuis que le ratio du jeu est dans le fichier de données.
-    if (!bilanDXP) continue;
-    if (!bilanDXP.montee.atteignable || bilanDXP.montee.nombreDeCrafts <= 0) continue;
+    // La quantité vient du chaînage, qui a déjà décidé au bon niveau de départ.
+    // La recalculer ici la referait au niveau d'avant la session, et le compte
+    // de crafts ne mènerait plus au niveau que la ligne annonce.
+    const entree = chaineDeLaSession.get(craft.identifiantDeLigne);
+    if (!entree || entree.quantiteVoulue === null) continue;
 
-    if (craft.quantiteACrafter !== bilanDXP.montee.nombreDeCrafts) {
-      craft.quantiteACrafter = bilanDXP.montee.nombreDeCrafts;
+    if (craft.quantiteACrafter !== entree.quantiteVoulue) {
+      craft.quantiteACrafter = entree.quantiteVoulue;
       quelqueChoseAChange = true;
     }
   }
@@ -352,8 +386,10 @@ function appliquerLesObjectifsAuxQuantites() {
 
 function dessinerUneCarteDeCraft(noeud, bilan, analyse) {
   const craft = noeud.craft;
+  const entreeChainee = chaineDeLaSession.get(craft.identifiantDeLigne);
   const bilanDXP = chiffrerLXPDUnCraft(craft,
-    objectifsParLigne.get(craft.identifiantDeLigne), bilan.quantiteEffective);
+    objectifsParLigne.get(craft.identifiantDeLigne), bilan.quantiteEffective,
+    entreeChainee ? entreeChainee.experienceDeDepart : undefined);
   const objectifChoisi = objectifsParLigne.get(craft.identifiantDeLigne);
 
   const carte = document.createElement("div");

@@ -30,6 +30,9 @@ import { deduireLeRatioDepuisUneObservation, calculerLeFacteurDeRegression,
          projeterLeMetierApresDesCrafts, NIVEAU_MAXIMAL_DUN_METIER }
   from "../calculateur/js/xp-metier.js";
 import { VERSION_COURANTE_DU_SCHEMA } from "../calculateur/js/config.js";
+import { installerLaTableDesMetiers } from "../calculateur/js/metiers.js";
+import { chainerLXPDeLaSession, chiffrerLXPDUnCraft, lireLArriveeDeChaqueMetier }
+  from "../calculateur/js/xp-session.js";
 
 let nombreDEchecs = 0;
 function verifier(intitule, obtenu, attendu) {
@@ -744,6 +747,112 @@ verifier("une recette éteinte ne fait plus monter",
     niveauActuel: 150, experienceActuelle: calculerLeSeuilDUnNiveau(150),
     nombreDeCrafts: 100000, niveauDeLaRecette: 40, ratioDXP: 20
   }).niveauxGagnes, 0);
+
+console.log("\n--- Le chaînage de l'XP entre les crafts d'une session ---");
+
+/*
+ * LE CAS DE BRICE, EXACTEMENT
+ *
+ * Bûcheron 40. Le Substrat de Bocage est de niveau 40, le Substrat de Futaie de
+ * niveau 60 : hors de portée. Monter de vingt niveaux avec le premier rend le
+ * second craftable, et l'écran doit s'en apercevoir — c'est tout l'objet du
+ * chaînage, et le défaut qu'il corrige.
+ */
+// Les entrées sont recopiées telles quelles du fichier de données : le test
+// reproduit alors l'écran de Brice au chiffre près, ratio d'XP compris. Une
+// table inventée aurait donné d'autres nombres, et n'aurait rien prouvé de ce
+// qu'il voit.
+installerLaTableDesMetiers({
+  12745: [2, 40, 20],   // Substrat de Bocage,  Bûcheron 40, ratio 20 %
+  2540: [2, 60, 20],    // Substrat de Futaie,  Bûcheron 60, ratio 20 %
+  283: [26, 40, 5]      // Potion de Soin, un autre métier : ne doit pas se mêler
+});
+
+const craftDeTest = (ligne, identifiantAnkama, quantite) => ({
+  identifiantDeLigne: ligne, identifiantAnkama, identifiantDuCraftParent: null,
+  nom: "craft " + ligne, niveau: 0, adresseIcone: "", quantiteACrafter: quantite,
+  destination: "vente-par-lot", prixDeVenteUnitaire: 0,
+  prixDeVenteParTailleDeLot: {}, ingredients: []
+});
+
+remplacerLEtat({
+  versionDuSchema: VERSION_COURANTE_DU_SCHEMA,
+  craftsDeLaSession: [
+    craftDeTest("bocage", 12745, 1),
+    craftDeTest("futaie", 2540, 1)
+  ],
+  experienceParMetier: { 2: 15769 }   // Bûcheron 40, comme en jeu
+});
+
+// Un seul craft de Bocage prévu : le Futaie part 160 XP plus haut, ce qui ne
+// suffit pas à lui faire gagner un niveau.
+let chainage = chainerLXPDeLaSession(new Map());
+verifier("le second craft part après l'XP du premier",
+  chainage.get("futaie").experienceDeDepart, 15769 + 160);
+
+let futaie = chiffrerLXPDUnCraft({ identifiantAnkama: 2540 }, 1, 1,
+  chainage.get("futaie").experienceDeDepart);
+verifier("et le Substrat de Futaie n'est pas encore craftable", futaie.craftable, false);
+verifier("il manque vingt niveaux", futaie.niveauxManquantsPourCrafter, 20);
+
+// Vingt niveaux visés sur le Bocage : le Futaie devient craftable.
+const objectifs = new Map([["bocage", 20]]);
+chainage = chainerLXPDeLaSession(objectifs);
+
+verifier("l'objectif décide de la quantité du Bocage",
+  chainage.get("bocage").quantiteVoulue > 0, true);
+verifier("le Bocage, lui, part toujours de l'XP réelle",
+  chainage.get("bocage").experienceDeDepart, 15769);
+
+futaie = chiffrerLXPDUnCraft({ identifiantAnkama: 2540 }, 1, 1,
+  chainage.get("futaie").experienceDeDepart);
+verifier("le Substrat de Futaie devient craftable", futaie.craftable, true);
+verifier("et il se chiffre au niveau 60, pas au 40", futaie.situation.niveau, 60);
+
+// L'XP réelle n'est JAMAIS réécrite : c'est la promesse faite à l'écran, et
+// la seule chose qui distingue une simulation d'une saisie.
+verifier("l'XP réelle du métier n'a pas bougé",
+  etatApplication.experienceParMetier[2], 15769);
+
+const arrivees = lireLArriveeDeChaqueMetier(objectifs);
+verifier("la carte du métier annonce l'arrivée de la session",
+  arrivees.get(2).niveauFinal, 60);
+
+/*
+ * Un métier voisin ne doit pas hériter du chaînage d'un autre. Sans cette
+ * séparation, crafter du Bûcheron ferait monter l'Alchimiste à l'écran.
+ */
+remplacerLEtat({
+  versionDuSchema: VERSION_COURANTE_DU_SCHEMA,
+  craftsDeLaSession: [
+    craftDeTest("bocage", 12745, 500),
+    craftDeTest("potion", 283, 1)
+  ],
+  experienceParMetier: { 2: 15769, 26: 15769 }
+});
+chainage = chainerLXPDeLaSession(new Map());
+verifier("un autre métier garde son propre départ",
+  chainage.get("potion").experienceDeDepart, 15769);
+
+/*
+ * Trois crafts du même métier se chaînent en cascade, chacun repartant de là où
+ * le précédent s'arrête. Le test vérifie la CROISSANCE stricte : des départs
+ * égaux signeraient un chaînage qui ne chaîne rien.
+ */
+remplacerLEtat({
+  versionDuSchema: VERSION_COURANTE_DU_SCHEMA,
+  craftsDeLaSession: [
+    craftDeTest("a", 12745, 50),
+    craftDeTest("b", 12745, 50),
+    craftDeTest("c", 12745, 50)
+  ],
+  experienceParMetier: { 2: 15769 }
+});
+chainage = chainerLXPDeLaSession(new Map());
+const departs = ["a", "b", "c"].map(l => chainage.get(l).experienceDeDepart);
+verifier("le premier part de l'XP réelle", departs[0], 15769);
+verifier("et chaque craft repart plus haut que le précédent",
+  departs[0] < departs[1] && departs[1] < departs[2], true);
 
 console.log("\n--- Attribution d'un relevé aux ressources de la session ---");
 

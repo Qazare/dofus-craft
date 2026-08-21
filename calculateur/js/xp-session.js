@@ -38,8 +38,13 @@ import {
  *            niveau:number, seuilDuNiveau:number, seuilSuivant:number,
  *            xpDansLePalier:number, xpRestantePourLeNiveau:number}|null}
  */
-export function lireLaSituationDUnMetier(identifiantDuMetier, nomDuMetier) {
-  const experienceTotale = lireLExperienceDUnMetier(identifiantDuMetier);
+export function lireLaSituationDUnMetier(identifiantDuMetier, nomDuMetier, experienceImposee) {
+  // L'XP réelle est la base, toujours. Une XP imposée sert au CHAÎNAGE : le
+  // deuxième craft d'une session se juge au niveau où le premier l'a amené, pas
+  // au niveau d'avant la session.
+  const experienceTotale = experienceImposee === undefined || experienceImposee === null
+    ? lireLExperienceDUnMetier(identifiantDuMetier)
+    : experienceImposee;
   const niveau = calculerLeNiveauDepuisLXP(experienceTotale);
   const seuilDuNiveau = calculerLeSeuilDUnNiveau(niveau);
   const seuilSuivant = niveau >= NIVEAU_MAXIMAL_DUN_METIER
@@ -93,13 +98,16 @@ export function listerLesMetiersDeLaSession() {
  * @param {number|null} quantiteEffective  quantité réellement prévue, pour la
  *        projection. Celle du craft par défaut ; un sous-craft la tient de son
  *        parent, et la sienne propre ne veut rien dire.
+ * @param {number|null} experienceDeDepart  XP cumulée d'où partir. L'XP réelle
+ *        du métier par défaut ; le chaînage y met celle qu'atteignent les crafts
+ *        placés avant celui-ci dans la session.
  * @returns {Object|null} null si le métier de la recette est inconnu
  */
-export function chiffrerLXPDUnCraft(craft, niveauxAGagner, quantiteEffective) {
+export function chiffrerLXPDUnCraft(craft, niveauxAGagner, quantiteEffective, experienceDeDepart) {
   const recette = lireLaRecetteConnue(craft.identifiantAnkama);
   if (!recette) return null;
 
-  const situation = lireLaSituationDUnMetier(recette.jobId, recette.metier);
+  const situation = lireLaSituationDUnMetier(recette.jobId, recette.metier, experienceDeDepart);
   const observation = lireLObservationDXP(craft.identifiantAnkama);
 
   // Sans le niveau auquel l'XP a été vue, la régression ne peut pas être
@@ -183,6 +191,138 @@ export function chiffrerLXPDUnCraft(craft, niveauxAGagner, quantiteEffective) {
     // veut vraiment savoir : jusqu'où elle le mène avant de devoir en changer.
     niveauOuLaRecetteSEteint: recette.niveauRequis + 100
   };
+}
+
+/* ============================================================
+   LE CHAÎNAGE : UNE SESSION EST UNE SUITE, PAS UNE LISTE
+
+   Chaque craft était projeté depuis l'XP réelle du métier, donc tous depuis le
+   même point de départ. La session s'en trouvait fausse dès qu'elle contenait
+   deux recettes du même métier : monter Bûcheron de 40 à 60 avec des Substrats
+   de Bocage rend les Substrats de Futaie craftables, et l'écran continuait
+   pourtant à les marquer hors de portée et à les chiffrer au niveau 40.
+
+   Le chaînage corrige cela. L'XP RÉELLE RESTE LA BASE — elle est saisie, elle
+   n'est jamais réécrite — et une XP SIMULÉE l'accompagne, qui accumule les gains
+   des crafts déjà planifiés. Chaque craft part de là où le précédent l'a laissé.
+
+   DANS L'ORDRE DE LA SESSION, ET C'EST UN CHOIX
+
+   L'ordre retenu est celui des cartes, donc celui dans lequel Brice a ajouté ses
+   recettes. Ce n'est pas un détail : chaîner dans un autre ordre donnerait
+   d'autres niveaux, et il n'existe aucun ordre « juste » dans l'absolu. Celui
+   des cartes a le mérite d'être visible et réarrangeable, ce qu'un tri caché ne
+   serait pas.
+
+   LES SOUS-CRAFTS N'Y CONTRIBUENT PAS
+
+   Ils rapportent pourtant de l'XP, et leur quantité est bien connue. Mais elle
+   se déduit de l'analyse, qui a besoin des quantités que ce calcul produit : les
+   faire entrer ici demanderait de résoudre les deux ensemble. La simulation est
+   donc PRUDENTE plutôt que fausse — elle sous-estime le niveau atteint, jamais
+   l'inverse, ce qui est le bon sens de l'erreur quand on décide d'acheter des
+   ressources.
+   ============================================================ */
+
+/**
+ * Point de départ de chaque craft de la session, et quantité voulue par son
+ * objectif, calculés en une seule passe dans l'ordre des cartes.
+ *
+ * Une seule passe, et pas deux, parce que les deux résultats se tiennent : la
+ * quantité d'un craft dépend du niveau où il commence, et le niveau où commence
+ * le suivant dépend de cette quantité. Les calculer séparément les ferait
+ * diverger, et l'écran afficherait un compte de crafts qui ne mène pas au niveau
+ * annoncé juste à côté.
+ *
+ * @param {Map<string, number>} objectifsParLigne  niveaux visés, par ligne
+ * @returns {Map<string, {experienceDeDepart:number, quantiteVoulue:number|null}>}
+ */
+export function chainerLXPDeLaSession(objectifsParLigne) {
+  const experienceSimuleeParMetier = new Map();
+  const parLigne = new Map();
+
+  const lireLeDepart = identifiantDuMetier =>
+    experienceSimuleeParMetier.has(identifiantDuMetier)
+      ? experienceSimuleeParMetier.get(identifiantDuMetier)
+      : lireLExperienceDUnMetier(identifiantDuMetier);
+
+  for (const craft of etatApplication.craftsDeLaSession) {
+    const recette = lireLaRecetteConnue(craft.identifiantAnkama);
+    if (!recette) continue;
+
+    const experienceDeDepart = lireLeDepart(recette.jobId);
+
+    // Un sous-craft hérite du départ courant de son métier, pour que son propre
+    // chiffrage reste cohérent, mais n'avance pas le compteur.
+    if (craft.identifiantDuCraftParent !== null) {
+      parLigne.set(craft.identifiantDeLigne, { experienceDeDepart, quantiteVoulue: null });
+      continue;
+    }
+
+    const niveauxVises = objectifsParLigne ? objectifsParLigne.get(craft.identifiantDeLigne) : null;
+    const bilan = chiffrerLXPDUnCraft(craft, niveauxVises, undefined, experienceDeDepart);
+    if (!bilan) continue;
+
+    // La quantité que l'objectif réclame, quand il y en a un et qu'il est
+    // atteignable. Sinon celle du champ, qui fait foi.
+    const quantiteVoulue = niveauxVises && bilan.montee.atteignable
+      && bilan.montee.nombreDeCrafts > 0
+        ? bilan.montee.nombreDeCrafts
+        : null;
+
+    parLigne.set(craft.identifiantDeLigne, { experienceDeDepart, quantiteVoulue });
+
+    // Le compteur avance sur la quantité RETENUE, pas sur celle du champ : quand
+    // un objectif est en vigueur, c'est lui qui décidera de la quantité au
+    // redessin, et partir de l'ancienne décalerait tout le reste de la chaîne.
+    const quantiteRetenue = quantiteVoulue === null ? craft.quantiteACrafter : quantiteVoulue;
+    const arrivee = projeterLeMetierApresDesCrafts({
+      niveauActuel: bilan.situation.niveau,
+      experienceActuelle: experienceDeDepart,
+      nombreDeCrafts: quantiteRetenue,
+      niveauDeLaRecette: recette.niveauRequis,
+      ratioDXP: bilan.ratioDXP
+    });
+    experienceSimuleeParMetier.set(recette.jobId, arrivee.experienceFinale);
+  }
+
+  return parLigne;
+}
+
+/**
+ * Où chaque métier de la session finit, une fois tous ses crafts faits.
+ *
+ * Sert la carte du métier, qui montre l'XP réelle saisie et, à côté, celle que
+ * la session promet. C'est le « second champ » : l'XP réelle reste la base et
+ * n'est jamais réécrite, la simulée ne vit que le temps de l'affichage.
+ *
+ * @returns {Map<number, {experienceFinale:number, niveauFinal:number}>}
+ */
+export function lireLArriveeDeChaqueMetier(objectifsParLigne) {
+  const parMetier = new Map();
+  const chaine = chainerLXPDeLaSession(objectifsParLigne);
+
+  for (const craft of etatApplication.craftsDeLaSession) {
+    if (craft.identifiantDuCraftParent !== null) continue;
+    const recette = lireLaRecetteConnue(craft.identifiantAnkama);
+    if (!recette) continue;
+
+    const entree = chaine.get(craft.identifiantDeLigne);
+    if (!entree) continue;
+
+    const bilan = chiffrerLXPDUnCraft(craft,
+      objectifsParLigne ? objectifsParLigne.get(craft.identifiantDeLigne) : null,
+      entree.quantiteVoulue === null ? undefined : entree.quantiteVoulue,
+      entree.experienceDeDepart);
+    if (!bilan) continue;
+
+    parMetier.set(recette.jobId, {
+      experienceFinale: bilan.projection.experienceFinale,
+      niveauFinal: bilan.projection.niveauFinal
+    });
+  }
+
+  return parMetier;
 }
 
 /* ============================================================

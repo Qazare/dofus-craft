@@ -63,6 +63,22 @@ let leChargementEstFait = false;
  */
 let chargementEnCours = null;
 
+/**
+ * Installe une table de métiers sans passer par le réseau.
+ *
+ * Existe pour les tests, et pour eux seuls : la logique de session — chaînage
+ * de l'XP, objectifs, craftabilité — se teste sous Node, où `fetch` n'a aucun
+ * fichier à servir. Une table courte, écrite à la main dans le test, est aussi
+ * plus lisible qu'un extrait des quatre mille recettes du jeu.
+ *
+ * Même geste que la table d'XP, qui est injectée plutôt qu'importée pour la
+ * même raison.
+ */
+export function installerLaTableDesMetiers(table) {
+  metiersParRecette = table || {};
+  leChargementEstFait = true;
+}
+
 export function chargerLesMetiers() {
   if (chargementEnCours) return chargementEnCours;
 

@@ -421,6 +421,14 @@ input::placeholder { color: #4c574f; }
    reste entièrement vivante, et c'est voulu : comparer ce vers quoi monter est
    l'usage principal d'une recette hors de portée. D'où le même gabarit que la
    marque de sous-craft, et une couleur d'alerte plutôt qu'un grisé. */
+/* Où un métier arrive si toute la session est craftée. Posée SOUS l'XP réelle
+   et dessinée plus discrètement qu'elle : c'est une projection, la saisie reste
+   la source de vérité et rien ne doit laisser croire l'inverse. */
+.arrivee-metier {
+  margin-top: 4px; font-size: 11px; font-variant-numeric: tabular-nums;
+  border-top: 1px dashed var(--bordure); padding-top: 5px;
+}
+
 .marque-non-craftable {
   font-size: 9px; letter-spacing: .06em; text-transform: uppercase;
   color: var(--perte); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px;
