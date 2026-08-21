@@ -232,9 +232,10 @@ export function construireLeCalibrageDXP(craft, bilanDXP) {
   // l'écran ne disait que le champ d'à côté était le coupable.
   const niveauPropose = observation.niveauMetierObserve || bilanDXP.situation.niveau;
 
-  return '<div class="champ-etiquete"><label class="etiquette" title="Se remplit'
-    + " tout seul quand tu ressaisis l'XP cumulée du métier après un lot de"
-    + ' crafts. À taper à la main seulement pour corriger.">XP par craft</label>'
+  return '<div class="champ-etiquete"><label class="etiquette" title="Laissé vide,'
+    + " l'XP est calculée depuis les fichiers du jeu et c'est le cas normal. Un"
+    + " chiffre ici PRIME sur le calcul : à ne remplir que si le jeu t'annonce"
+    + ' autre chose.">XP par craft</label>'
     + '<input data-xp-observee="oui" value="'
     + (observation.xpObservee ? observation.xpObservee : "")
     + '" placeholder="auto"></div>'
@@ -260,34 +261,30 @@ export function construireLaLigneDXP(craft, bilanDXP, niveauxVisesChoisis,
   const { situation, recette, montee, xpParCraftMaintenant } = bilanDXP;
   const selecteur = construireLeSelecteurDObjectif(niveauxVisesChoisis, situation.niveau);
 
-  if (!bilanDXP.observationComplete) {
-    return '<div class="ligne-xp">'
-      + '<span class="attenue">' + echapperPourHtml(recette.metier) + " "
-        + situation.niveau + "</span>"
-      + '<span class="prix-manquant" title="Saisis l\'XP cumulée du métier'
-        + " ci-dessus, fais tes crafts, ressaisis-la : la carte du métier"
-        + ' proposera alors de calibrer cette recette en un clic.">'
-        + "pas encore calibrée — un lot de crafts et deux relevés d'XP suffisent</span>"
-      + selecteur + "</div>";
-  }
-
-  // Quand le relevé date d'un autre niveau, le chiffre affiché est PROJETÉ par
-  // la régression, pas observé. La nuance compte : la courbe de niveau est
-  // exacte, le coefficient de régression ne l'est pas encore, et un relevé frais
-  // vaut mieux qu'une longue projection. Le dire invite à en refaire un.
-  const ecartDObservation = Math.abs(
-    (bilanDXP.observation.niveauMetierObserve || situation.niveau) - situation.niveau);
-  const mentionDeProjection = ecartDObservation > 0
-    ? ' <span class="attenue" title="Ton relevé date du niveau '
+  // Le chiffre vient du fichier de données, donc du jeu, et il n'y a plus rien à
+  // calibrer. Un relevé de Brice le remplace quand il en a fait un, et c'est le
+  // seul cas où la provenance mérite d'être dite : les deux ne se valent pas.
+  const mentionDeProvenance = bilanDXP.ratioVientDUnReleve
+    ? ' <span class="attenue" title="Ce chiffre vient de ton relevé au niveau '
       + bilanDXP.observation.niveauMetierObserve
-      + '. Ce chiffre est projeté par la régression ; refais un relevé pour le'
-      + ' caler exactement.">(projeté depuis le niveau '
-      + bilanDXP.observation.niveauMetierObserve + ")</span>"
+      + ", et non du calcul. Vide le champ « XP par craft » pour revenir au"
+      + ' calcul.">(d\'après ton relevé)</span>'
     : "";
 
   const resume = "<span>" + echapperPourHtml(recette.metier) + " "
     + situation.niveau + " · <strong>" + formaterNombreSimple(xpParCraftMaintenant)
-    + "</strong> XP par craft" + mentionDeProjection + "</span>";
+    + "</strong> XP par craft" + mentionDeProvenance + "</span>";
+
+  // Un ratio de zéro n'est pas une lacune, c'est une propriété de la recette :
+  // quatre-vingts recettes du jeu ne rapportent jamais rien, à aucun niveau. Le
+  // dire franchement évite d'aller le découvrir après deux cents crafts.
+  if (recette.ratioDXP === 0 && !bilanDXP.ratioVientDUnReleve) {
+    return '<div class="ligne-xp">' + resume
+      + '<span class="prix-manquant" title="Cette recette a un ratio d\'XP nul'
+        + " dans les fichiers du jeu. Elle ne rapporte rien, quel que soit ton"
+        + ' niveau de métier.">ne rapporte jamais d\'XP</span>'
+      + selecteur + "</div>";
+  }
 
   if (xpParCraftMaintenant <= 0) {
     return '<div class="ligne-xp">' + resume

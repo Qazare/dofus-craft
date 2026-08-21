@@ -159,14 +159,26 @@
   <p>Le coût de chaque objet est une quote-part du coût groupé des ressources, au prorata des
   quantités, puisque acheter en lot pour plusieurs recettes coûte moins cher que recette par recette.</p>
 
-  <p><strong>L'XP de métier : tu ne saisis que l'XP cumulée.</strong> C'est le seul chiffre que
-  le jeu donne de façon fiable, et il suffit à tout. Saisis-le, fais tes crafts, ressaisis-le : la
-  carte du métier propose alors d'attribuer le gain à une recette, tu confirmes le nombre de crafts
-  faits, et la recette est calibrée pour toujours. <strong>L'écart entre deux relevés est l'XP par
-  craft</strong> — il n'y avait rien d'autre à chercher, et plus rien à taper à la main. Le
-  calibrage se fait recette par recette parce que l'XP de base leur est propre : l'Essence de
-  Batofu et la Potion de Soin sont toutes deux de niveau 40, chez l'Alchimiste, et rapportent 160
-  et 40 XP. Ni le niveau ni le nombre de cases ne la prédisent.</p>
+  <p><strong>L'XP par craft ne se saisit plus du tout : elle est calculée.</strong> C'est la
+  formule du jeu lui-même, <em>20 × niveau de la recette ÷ (écart<sup>1,1</sup> ÷ 10 + 1)</em>,
+  multipliée par le <em>ratio d'XP</em> de la recette. Ajoute une recette, saisis ton XP cumulée de
+  métier, et le chiffre est là. Rien à crafter d'abord, rien à relever.</p>
+
+  <p>Ce ratio est ce qui manquait. L'Essence de Batofu et la Potion de Soin sont toutes deux de
+  niveau 40 chez l'Alchimiste et rapportent 160 et 40 XP — d'où la conclusion, un temps, que l'XP
+  était propre à chaque recette et qu'aucune formule ne la donnerait. En fait la première est une
+  « Essence de gardien de donjon », à 20 %, la seconde une « Potion », à 5 %. Quatre fois moins,
+  exactement le rapport observé. Le ratio est un champ des fichiers du jeu, porté par l'objet ou par
+  son type, et il voyage maintenant dans le fichier des métiers.</p>
+
+  <p>Il apprend au passage une chose qu'aucun relevé n'aurait donnée sans crafter pour rien :
+  <strong>87 recettes ont un ratio nul</strong> et ne rapportent jamais d'XP, à aucun niveau. La
+  ligne le dit avant que tu t'y lances.</p>
+
+  <p>Le champ <em>XP par craft</em> reste, en secours. Laissé vide — le cas normal — l'XP est
+  calculée. Un chiffre saisi <strong>prime</strong> sur le calcul : c'est le filet si une mise à
+  jour du jeu venait à écarter la formule. Le calibrage par deux relevés d'XP cumulée fonctionne
+  toujours et remplit ce champ pour toi.</p>
 
   <p><strong>L'objectif se compte en niveaux à gagner, et remplit la quantité.</strong>
   <em>+1</em>, <em>+10</em>, <em>+20</em> : le compte de crafts se fait palier par palier, en
@@ -182,15 +194,16 @@
   niveau : un niveau ne dit pas où tu en es dans le palier, et c'est ce reste qui décide du nombre
   de crafts.</p>
 
-  <p><strong>Ce qui reste incertain</strong>, et qui est signalé à l'écran : la <em>régression</em>.
-  Une recette rapporte moins à mesure que ton métier monte, d'environ 1 % par niveau d'écart,
-  jusqu'à ne plus rien donner cent niveaux au-dessus d'elle. Ce coefficient vient du forum
-  officiel, donné de mémoire par des joueurs, et n'est pas confirmé. Quand un chiffre est
-  <em>projeté</em> depuis un relevé fait à un autre niveau, la ligne le dit — refais un relevé
-  plutôt que de faire confiance à une longue projection.</p>
+  <p><strong>La régression n'est plus une hypothèse.</strong> Une recette rapporte moins à mesure
+  que ton métier la dépasse, et la chute est bien plus raide qu'on ne le croyait : dix niveaux
+  d'écart laissent 44 % de l'XP, trente n'en laissent que 19 %, et au-delà de cent il ne reste
+  rien. On appliquait <em>1 % par niveau</em> — l'une des deux formules qui circulaient sur le
+  forum officiel. C'était l'autre la bonne, et à trente niveaux d'écart l'ancienne annonçait 70 %
+  là où le jeu en donne 19. Changer de recette en montant n'est pas un raffinement, c'est la seule
+  façon de continuer à avancer.</p>
 
   <p class="attenue">Recettes : <a href="https://api.dofusdu.de" target="_blank" rel="noopener">DofusDude</a>.
-  Métiers : <a href="https://github.com/bot4dofus/Datafus" target="_blank" rel="noopener">Datafus</a>, en MIT.
+  Métiers et ratios d'XP : <a href="https://github.com/bot4dofus/Datafus" target="_blank" rel="noopener">Datafus</a>, en MIT.
   Prix : <a href="https://dofus-calculator.fr" target="_blank" rel="noopener">dofus-calculator.fr</a>,
   serveur Brial. Ton jeton d'écriture reste dans ce navigateur et n'est jamais envoyé ailleurs
   qu'à dofus-calculator.</p>

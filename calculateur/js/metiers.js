@@ -37,7 +37,9 @@
  * ni nommable ni illustrable. Ce fichier dit QU'il y a une recette, jamais
  * laquelle : une source par question, jamais deux sources pour la même.
  */
-import { ADRESSE_DES_METIERS_PAR_RECETTE, NOMS_DES_METIERS } from "./config.js";
+import {
+  ADRESSE_DES_METIERS_PAR_RECETTE, NOMS_DES_METIERS, RATIO_DXP_PAR_DEFAUT
+} from "./config.js";
 
 /**
  * Table `identifiant Ankama` vers `[jobId, niveau requis]`, une fois chargée.
@@ -93,7 +95,7 @@ export function lireLaRecetteConnue(identifiantAnkama) {
   const entree = metiersParRecette[identifiantAnkama];
   if (!entree) return null;
 
-  const [identifiantDuMetier, niveauRequis] = entree;
+  const [identifiantDuMetier, niveauRequis, ratioDXP] = entree;
   return {
     craftable: true,
     jobId: identifiantDuMetier,
@@ -101,7 +103,11 @@ export function lireLaRecetteConnue(identifiantAnkama) {
     // Dans Dofus, le niveau de métier exigé par un atelier est celui de l'objet
     // produit. C'est le champ `resultLevel` de la recette, et il n'a pas
     // d'exception connue sur les recettes ordinaires.
-    niveauRequis
+    niveauRequis,
+    // Le `craftXpRatio` du client, en pourcentage, déjà replié sur le type de
+    // l'objet à l'extraction. Absent du fichier quand il vaut le défaut, ce qui
+    // est le cas des quatre cinquièmes des recettes.
+    ratioDXP: ratioDXP === undefined ? RATIO_DXP_PAR_DEFAUT : ratioDXP
   };
 }
 

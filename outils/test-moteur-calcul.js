@@ -24,7 +24,7 @@ import { analyserLaSessionComplete, listerLesIdentifiantsDesRessourcesDeLaSessio
   from "../calculateur/js/analyse.js";
 import { construireLArbreDesCrafts, listerLesObjetsDeLaBranche }
   from "../calculateur/js/arbre-de-crafts.js";
-import { deduireLExperienceDeBase, calculerLeFacteurDeRegression,
+import { deduireLeRatioDepuisUneObservation, calculerLeFacteurDeRegression,
          calculerLExperienceDUnCraft, calculerLeNiveauDepuisLXP,
          calculerLeSeuilDUnNiveau, calculerLesCraftsPourAtteindreUnNiveau,
          NIVEAU_MAXIMAL_DUN_METIER }
@@ -494,41 +494,87 @@ verifier("et sa quantité saisie est reprise",
 console.log("\n--- Expérience de métier : la formule ---");
 
 /*
- * Les trois relevés de Brice, au métier 89. C'est ce qui départage les deux
- * formules qui circulent sur le forum officiel : celle retenue en déduit une
- * progression régulière de l'XP de base d'environ 10 % par niveau de recette,
- * l'autre une progression de 1,5 % puis de 11 %, qui ne ressemble à rien.
+ * LES SIX RELEVÉS DE BRICE, CONTRE LA FORMULE DU CLIENT
+ *
+ * C'est le test qui compte : la formule est recopiée de `Item.getCraftXpByJobLevel`
+ * dans le client décompilé, PAS ajustée sur ces relevés. Ils sont donc une
+ * vérification indépendante, et ils tombent tous au point près.
+ *
+ * Les trois relevés dits « au métier 89 » sont en fait au métier 90 : c'est la
+ * seule lecture qui les rend tous exacts, et l'autre est impossible — une
+ * recette de niveau 90 au métier 89 donnerait un écart négatif. La note prise
+ * sur le moment était d'un niveau à côté.
  */
 const RELEVES_DE_BRICE = [
-  { metier: 89, recette: 90, xp: 1800 },
-  { metier: 89, recette: 89, xp: 1618 },
-  { metier: 89, recette: 88, xp: 1449 }
+  // Alchimiste 40. L'Essence de Batofu est de type « Essence de gardien de
+  // donjon », à 20 % ; la Potion de Soin est une « Potion », à 5 %. Quatre fois
+  // moins, et c'est très exactement le rapport de 160 à 40.
+  { metier: 40, recette: 40, ratio: 20, xp: 160, nom: "Essence de Batofu" },
+  { metier: 40, recette: 40, ratio: 5, xp: 40, nom: "Potion de Soin" },
+  { metier: 40, recette: 40, ratio: 10, xp: 80, nom: "la troisième recette" },
+  // Sans ratio propre, donc à 100 %.
+  { metier: 90, recette: 90, ratio: 100, xp: 1800, nom: "recette 90 au métier 90" },
+  { metier: 90, recette: 89, ratio: 100, xp: 1618, nom: "recette 89 au métier 90" },
+  { metier: 90, recette: 88, ratio: 100, xp: 1449, nom: "recette 88 au métier 90" }
 ];
 
-const basesDeduites = RELEVES_DE_BRICE.map(r =>
-  deduireLExperienceDeBase(r.xp, r.metier, r.recette));
+for (const releve of RELEVES_DE_BRICE) {
+  verifier(releve.nom + " rapporte " + releve.xp + " XP",
+    calculerLExperienceDUnCraft(releve.metier, releve.recette, releve.ratio), releve.xp);
+}
 
-// 1 782, 1 618, 1 464 : chaque cran de recette vaut environ 10 % de plus.
-const progressions = [basesDeduites[0] / basesDeduites[1], basesDeduites[1] / basesDeduites[2]];
-verifier("l'XP de base progresse régulièrement d'un niveau de recette à l'autre",
-  progressions.every(p => p > 1.09 && p < 1.12), true);
-
+/*
+ * La régression, telle que le client l'applique : `1 / (écart^1,1 / 10 + 1)`.
+ *
+ * Ce n'est PAS la linéaire `1 − écart/100` qu'on appliquait, et l'écart n'est
+ * pas cosmétique — à trente niveaux, la linéaire annonce 70 % de l'XP là où le
+ * jeu en donne 21 %. Des deux formules qui circulaient sur le forum, c'est
+ * l'autre qui avait raison.
+ */
 verifier("sans écart, le facteur vaut 1", calculerLeFacteurDeRegression(50, 50), 1);
-verifier("dix niveaux au-dessus de la recette, on perd 10 %",
-  calculerLeFacteurDeRegression(60, 50), 0.9);
-verifier("sous le niveau de la recette, le facteur dépasse 1",
-  calculerLeFacteurDeRegression(49, 50), 1.01);
-// La borne qui empêche une XP négative : au-delà de cent niveaux d'écart, une
-// recette ne rapporte plus rien, elle ne retire pas de l'expérience.
-verifier("cent niveaux d'écart annulent l'XP", calculerLeFacteurDeRegression(150, 50), 0);
+verifier("dix niveaux au-dessus, il reste 44 %",
+  Math.round(calculerLeFacteurDeRegression(60, 50) * 100), 44);
+verifier("à trente niveaux, il reste 19 % et non 70",
+  Math.round(calculerLeFacteurDeRegression(80, 50) * 100), 19);
+
+// L'écart négatif est borné à zéro. Sans cette borne, `Math.pow` d'un négatif à
+// la puissance 1,1 rendrait NaN, qui se propagerait dans tout le chiffrage sans
+// que rien ne l'annonce.
+verifier("sous le niveau de la recette, le facteur ne dépasse pas 1",
+  calculerLeFacteurDeRegression(49, 50), 1);
+verifier("et il ne produit jamais de NaN",
+  Number.isFinite(calculerLeFacteurDeRegression(1, 200)), true);
+
+// Au-delà de cent niveaux d'écart, une recette ne rapporte plus rien.
+verifier("cent niveaux d'écart laissent encore de l'XP",
+  calculerLeFacteurDeRegression(150, 50) > 0, true);
+verifier("cent-un l'annulent", calculerLeFacteurDeRegression(151, 50), 0);
 verifier("et au-delà, elle reste nulle", calculerLeFacteurDeRegression(180, 50), 0);
 
-verifier("l'XP d'un craft est tronquée",
-  calculerLExperienceDUnCraft(1000, 55, 50), 950);
-verifier("une observation se retrouve à l'identique",
-  calculerLExperienceDUnCraft(deduireLExperienceDeBase(1449, 89, 88), 89, 88), 1449);
-verifier("une XP de base indéductible vaut 0",
-  deduireLExperienceDeBase(500, 200, 50), 0);
+verifier("l'XP d'un craft est tronquée après le ratio, pas avant",
+  calculerLExperienceDUnCraft(50, 50, 33), 330);
+// Un ratio nul est une vraie donnée du jeu : quatre-vingts recettes ne
+// rapportent jamais rien, à aucun niveau.
+verifier("un ratio nul ne rapporte rien",
+  calculerLExperienceDUnCraft(40, 40, 0), 0);
+verifier("un ratio absent vaut 100 %",
+  calculerLExperienceDUnCraft(40, 40, undefined), 800);
+
+/*
+ * LE CALIBRAGE MANUEL, DEVENU UN SECOURS
+ *
+ * On ne déduit plus une « XP de base » mais le RATIO qu'implique un relevé. La
+ * différence compte : le ratio ne dépend pas du niveau, donc l'observation
+ * continue de se projeter juste à mesure que le métier monte.
+ */
+verifier("un relevé rend le ratio du jeu",
+  Math.round(deduireLeRatioDepuisUneObservation(160, 40, 40)), 20);
+verifier("et il se reprojette à l'identique",
+  calculerLExperienceDUnCraft(40, 40, deduireLeRatioDepuisUneObservation(160, 40, 40)), 160);
+verifier("un relevé pris là où la recette ne rapporte plus n'apprend rien",
+  deduireLeRatioDepuisUneObservation(500, 200, 50), null);
+verifier("une XP nulle non plus",
+  deduireLeRatioDepuisUneObservation(0, 40, 40), null);
 
 console.log("\n--- La courbe d'XP des métiers ---");
 
@@ -579,7 +625,7 @@ console.log("\n--- Combien de crafts pour monter ---");
  */
 let montee = calculerLesCraftsPourAtteindreUnNiveau({
   niveauActuel: 40, experienceActuelle: 15769, niveauVise: 41,
-  xpDeBase: 160, niveauDeLaRecette: 40
+  niveauDeLaRecette: 40, ratioDXP: 20
 });
 verifier("la montée est atteignable", montee.atteignable, true);
 verifier("l'XP manquante pour le niveau 41", montee.paliers[0].xpManquante, 631);
@@ -591,39 +637,43 @@ verifier("quatre Essences de Batofu suffisent", montee.nombreDeCrafts, 4);
  */
 montee = calculerLesCraftsPourAtteindreUnNiveau({
   niveauActuel: 40, experienceActuelle: 15600, niveauVise: 44,
-  xpDeBase: 160, niveauDeLaRecette: 40
+  niveauDeLaRecette: 40, ratioDXP: 20
 });
+// La chute est bien plus raide que la linéaire ne le laissait croire : trois
+// niveaux d'écart coûtent déjà un quart de l'XP, là où l'ancienne formule n'en
+// retirait que trois pour cent.
 verifier("l'XP par craft baisse d'un palier à l'autre",
-  montee.paliers.map(p => p.xpParCraft), [160, 158, 156, 155]);
+  montee.paliers.map(p => p.xpParCraft), [160, 145, 131, 119]);
 verifier("le nombre de crafts par palier",
-  montee.paliers.map(p => p.nombreDeCrafts), [5, 6, 5, 6]);
+  montee.paliers.map(p => p.nombreDeCrafts), [5, 6, 7, 7]);
 
 /*
  * Le report du surplus n'est pas un détail, et c'est le troisième palier qui le
- * montre : le palier 42 -> 43 coûte 840 XP en tout, mais il n'en manque que 712
- * parce que le palier précédent s'est terminé 128 au-dessus de son seuil. Sans
- * ce report, il faudrait 6 crafts au lieu de 5, et l'erreur s'accumulerait sur
- * toute une montée.
+ * montre : le palier 42 -> 43 coûte 840 XP en tout, mais il n'en manque que 790
+ * parce que le palier précédent s'est terminé 50 au-dessus de son seuil. Sans ce
+ * report, l'erreur s'accumulerait sur toute une montée.
  */
 verifier("le palier 42 -> 43 coûte 840 XP",
   calculerLeSeuilDUnNiveau(43) - calculerLeSeuilDUnNiveau(42), 840);
-verifier("mais il n'en manque que 712, surplus reporté",
-  montee.paliers[2].xpManquante, 712);
+verifier("mais il n'en manque que 790, surplus reporté",
+  montee.paliers[2].xpManquante, 790);
 
 verifier("un niveau déjà atteint ne demande aucun craft",
   calculerLesCraftsPourAtteindreUnNiveau({
     niveauActuel: 40, experienceActuelle: 15769, niveauVise: 40,
-    xpDeBase: 160, niveauDeLaRecette: 40
+    niveauDeLaRecette: 40, ratioDXP: 20
   }).nombreDeCrafts, 0);
 
 // Une recette trop basse pour le métier ne mène nulle part, et le dire vaut
 // mieux que de renvoyer un nombre de crafts astronomique.
+// L'extinction tombe un niveau plus haut qu'avec la linéaire : le jeu laisse
+// une miette d'XP jusqu'à cent niveaux d'écart INCLUS, et coupe au cent-unième.
 const monteeImpossible = calculerLesCraftsPourAtteindreUnNiveau({
   niveauActuel: 140, experienceActuelle: calculerLeSeuilDUnNiveau(140),
-  niveauVise: 150, xpDeBase: 160, niveauDeLaRecette: 40
+  niveauVise: 150, niveauDeLaRecette: 40, ratioDXP: 20
 });
 verifier("une recette éteinte bloque la montée", monteeImpossible.atteignable, false);
-verifier("et le niveau de blocage est annoncé", monteeImpossible.niveauDeBlocage, 140);
+verifier("et le niveau de blocage est annoncé", monteeImpossible.niveauDeBlocage, 141);
 
 console.log("\n--- Attribution d'un relevé aux ressources de la session ---");
 

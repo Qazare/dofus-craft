@@ -413,6 +413,19 @@ console.log("\n--- XP de métier, de bout en bout ---");
 
 verifier("la carte du métier apparaît", await page.locator(".carte-metier").count(), 1);
 
+// LE CHANGEMENT QUI COMPTE : RIEN À CALIBRER
+//
+// Avant même qu'une XP de métier ait été saisie, la ligne annonce ce que la
+// recette rapporte. Le ratio d'XP du jeu voyage dans le fichier de données, donc
+// le chiffre est disponible dès l'ajout de la recette. La Coiffe du Boufcoul est
+// de niveau 89, sans ratio propre : au métier 1, l'écart de 88 niveaux ne laisse
+// presque rien, mais il ne laisse pas RIEN, et surtout aucune mention de
+// calibrage ne doit subsister.
+verifier("l'XP par craft s'affiche sans qu'on ait rien calibré",
+  /\d+\s*XP par craft/.test(await page.locator(".ligne-xp").innerText()), true);
+verifier("et plus rien ne réclame un calibrage",
+  (await page.locator(".ligne-xp").innerText()).includes("calibrée"), false);
+
 await page.fill("[data-xp-metier]", "15769");
 await page.locator("[data-xp-metier]").dispatchEvent("change");
 await page.waitForTimeout(200);
@@ -507,6 +520,39 @@ verifier("et la quantité est bien celle qu'annonce la ligne d'XP",
 await page.fill("[data-champ='quantiteACrafter']", "2");
 await page.locator("[data-champ='quantiteACrafter']").dispatchEvent("change");
 await page.waitForTimeout(300);
+
+// UNE RECETTE QUI NE RAPPORTE JAMAIS RIEN
+//
+// Quatre-vingts recettes du jeu ont un ratio d'XP nul. Aucun relevé ne pouvait
+// l'apprendre — il aurait fallu crafter pour rien avant de le constater. Le
+// fichier de données le sait maintenant, et l'objectif ne doit écrire aucune
+// quantité dans ce cas.
+await page.evaluate(() => {
+  const etat = JSON.parse(localStorage.getItem("calculateur-craft-dofus-v1"));
+  etat.craftsDeLaSession[0].identifiantAnkama = 1461;
+  etat.craftsDeLaSession[0].quantiteACrafter = 3;
+  etat.memoireExperienceParRecette = {};
+  localStorage.setItem("calculateur-craft-dofus-v1", JSON.stringify(etat));
+});
+await page.reload();
+await page.waitForTimeout(600);
+
+verifier("une recette à ratio nul est annoncée comme telle",
+  (await page.locator(".ligne-xp").innerText()).includes("ne rapporte jamais d'XP"), true);
+await page.selectOption("[data-objectif-xp]", "20");
+await page.waitForTimeout(300);
+verifier("et l'objectif n'y écrit aucune quantité",
+  await page.inputValue("[data-champ='quantiteACrafter']"), "3");
+
+// On rend la session à son état d'origine pour la suite du fichier.
+await page.evaluate(() => {
+  const etat = JSON.parse(localStorage.getItem("calculateur-craft-dofus-v1"));
+  etat.craftsDeLaSession[0].identifiantAnkama = 917;
+  etat.craftsDeLaSession[0].quantiteACrafter = 2;
+  localStorage.setItem("calculateur-craft-dofus-v1", JSON.stringify(etat));
+});
+await page.reload();
+await page.waitForTimeout(600);
 
 // --- Mode PIP : la liste de courses ---
 //

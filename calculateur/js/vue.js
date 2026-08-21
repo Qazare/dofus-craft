@@ -334,9 +334,11 @@ function appliquerLesObjectifsAuxQuantites() {
     if (!niveauxVises) continue;
 
     const bilanDXP = chiffrerLXPDUnCraft(craft, niveauxVises);
-    // Sans calibrage, sans XP restante ou sur un objectif hors d'atteinte, il
-    // n'y a pas de quantité à écrire. La carte dit déjà pourquoi.
-    if (!bilanDXP || !bilanDXP.observationComplete) continue;
+    // Sur une recette qui ne rapporte rien ou un objectif hors d'atteinte, il
+    // n'y a pas de quantité à écrire. La carte dit déjà pourquoi. Le calibrage,
+    // lui, n'est plus une condition : l'XP se calcule sans qu'on relève quoi que
+    // ce soit depuis que le ratio du jeu est dans le fichier de données.
+    if (!bilanDXP) continue;
     if (!bilanDXP.montee.atteignable || bilanDXP.montee.nombreDeCrafts <= 0) continue;
 
     if (craft.quantiteACrafter !== bilanDXP.montee.nombreDeCrafts) {

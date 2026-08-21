@@ -20,9 +20,9 @@ import {
 } from "./etat.js";
 import { lireLaRecetteConnue } from "./metiers.js";
 import {
-  deduireLExperienceDeBase, calculerLExperienceDUnCraft, calculerLeNiveauDepuisLXP,
-  calculerLeSeuilDUnNiveau, calculerLesCraftsPourAtteindreUnNiveau,
-  NIVEAU_MAXIMAL_DUN_METIER
+  deduireLeRatioDepuisUneObservation, calculerLExperienceDUnCraft,
+  calculerLeNiveauDepuisLXP, calculerLeSeuilDUnNiveau,
+  calculerLesCraftsPourAtteindreUnNiveau, NIVEAU_MAXIMAL_DUN_METIER
 } from "./xp-metier.js";
 
 /* ============================================================
@@ -99,17 +99,25 @@ export function chiffrerLXPDUnCraft(craft, niveauxAGagner) {
   const observation = lireLObservationDXP(craft.identifiantAnkama);
 
   // Sans le niveau auquel l'XP a été vue, la régression ne peut pas être
-  // défaite. On ne devine pas : le bilan le dit, et l'interface réclame le champ.
+  // défaite. On ne devine pas : l'observation est alors ignorée, et le calcul
+  // reprend la main — ce qu'il sait faire seul depuis qu'il tient la formule.
   const observationComplete = observation.xpObservee > 0
     && observation.niveauMetierObserve !== null && observation.niveauMetierObserve > 0;
 
-  const xpDeBase = observationComplete
-    ? deduireLExperienceDeBase(
+  // LE RATIO DU JEU D'ABORD, UN RELEVÉ RÉEL PAR-DESSUS
+  //
+  // Le fichier de données porte le `craftXpRatio` du client, ce qui suffit à
+  // tout calculer sans rien relever. Un relevé fait en jeu prime quand il
+  // existe : il ne sert plus à rendre le calcul possible, mais à le corriger si
+  // le jeu venait à s'écarter de la formule recopiée.
+  const ratioObserve = observationComplete
+    ? deduireLeRatioDepuisUneObservation(
         observation.xpObservee, observation.niveauMetierObserve, recette.niveauRequis)
-    : 0;
+    : null;
+  const ratioDXP = ratioObserve === null ? recette.ratioDXP : ratioObserve;
 
   const xpParCraftMaintenant = calculerLExperienceDUnCraft(
-    xpDeBase, situation.niveau, recette.niveauRequis);
+    situation.niveau, recette.niveauRequis, ratioDXP);
 
   // L'objectif est un NOMBRE DE NIVEAUX À GAGNER, pas un palier absolu : c'est
   // la question qu'on se pose devant l'écran, et elle reste valable quel que
@@ -121,8 +129,8 @@ export function chiffrerLXPDUnCraft(craft, niveauxAGagner) {
     niveauActuel: situation.niveau,
     experienceActuelle: situation.experienceTotale,
     niveauVise: cible,
-    xpDeBase,
-    niveauDeLaRecette: recette.niveauRequis
+    niveauDeLaRecette: recette.niveauRequis,
+    ratioDXP
   });
 
   return {
@@ -130,7 +138,10 @@ export function chiffrerLXPDUnCraft(craft, niveauxAGagner) {
     situation,
     observation,
     observationComplete,
-    xpDeBase,
+    ratioDXP,
+    // Vrai quand le chiffre affiché vient d'un relevé de Brice et non du fichier
+    // de données. L'écran le dit : les deux ne se valent pas en cas de doute.
+    ratioVientDUnReleve: ratioObserve !== null,
     xpParCraftMaintenant,
     niveauVise: cible,
     niveauxVises,

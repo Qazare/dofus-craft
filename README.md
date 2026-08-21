@@ -167,15 +167,21 @@ l'XP, le calculateur chiffre l'opération. Ce qu'il fait et que duffus ne fait p
   sur place », où les champs de prix restent saisissables — ce prix-là est celui
   auquel l'objet se vend, donc la moitié de l'arbitrage *le crafter ou l'acheter*,
   l'autre moitié étant son coût de fabrication, affiché à côté.
-- **XP de métier : tu ne saisis que l'XP cumulée, jamais l'XP par craft.** C'est
-  le seul chiffre que le jeu donne de façon fiable, et il suffit. Saisis-le,
-  craft, ressaisis-le : la carte du métier propose alors d'attribuer le gain à
-  une recette de la session, tu confirmes le nombre de crafts faits, et la
-  recette est calibrée pour toujours. L'écart entre deux relevés EST l'XP par
-  craft — il n'y avait rien d'autre à trouver. Le calibrage doit se faire recette
-  par recette parce que **l'XP de base est propre à chaque recette** : l'Essence
-  de Batofu et la Potion de Soin sont toutes deux de niveau 40 chez l'Alchimiste
-  et rapportent 160 et 40 XP.
+- **L'XP par craft est calculée, il n'y a plus rien à relever.** C'est la formule
+  du client Dofus, recopiée de `Item.getCraftXpByJobLevel` :
+  `floor(20 × niveauRecette / (écart^1,1 / 10 + 1) × ratio / 100)`. Le `ratio`
+  est le `craftXpRatio` des fichiers du jeu, porté par l'objet ou, à défaut, par
+  son type, et il voyage désormais dans `metiers-par-recette.json`. Ajoute une
+  recette, saisis ton XP cumulée de métier, le chiffre est là.
+  - C'est ce ratio qui manquait quand on avait conclu qu'**aucune formule ne
+    donnerait l'XP de base**. L'Essence de Batofu est une « Essence de gardien de
+    donjon », à 20 % ; la Potion de Soin est une « Potion », à 5 %. Quatre fois
+    moins, exactement le rapport de 160 à 40 qu'on ne savait pas expliquer.
+  - Il apprend aussi ce qu'aucun relevé n'aurait donné sans crafter pour rien :
+    **87 recettes ont un ratio nul** et ne rapportent jamais d'XP.
+  - Le champ « XP par craft » **reste, en secours** : laissé vide l'XP est
+    calculée, un chiffre saisi prime. Le calibrage par deux relevés d'XP cumulée
+    fonctionne toujours et remplit ce champ.
 - **Objectif en niveaux à gagner, et la quantité se remplit toute seule.** `+1`,
   `+10`, `+20` : le compte de crafts se fait **palier par palier**, en
   recalculant l'XP à chaque niveau gagné, puis **il est écrit dans la quantité du
@@ -332,19 +338,32 @@ donc servir le dossier, d'où `outils/servir.js`.
 1 bis. ~~**Dépendance à dofusdb pour le métier.**~~ Réglé le 20 08 2026 : la
    donnée vient de Datafus, en MIT, figée dans un fichier du dépôt. Aucun appel
    à un tiers, et la question de licence ne se pose plus.
-2. ~~**Formule d'XP de craft.**~~ Réglée le 20 08 2026, et par les relevés
-   eux-mêmes. La formule est `xpDeBase × (1 − (niveauDeMétier − niveauDeRecette)
-   / 100)`. Des deux formules qui circulent sur le forum officiel, toutes deux
-   données de mémoire par des joueurs, c'est la seule qui tienne devant les
-   trois relevés du niveau 89 : elle en déduit des XP de base de 1 782, 1 618 et
-   1 464, soit une progression régulière d'environ 10 % par niveau de recette.
-   L'autre, en `1 / (1 + 0,1 × écart^1,1)`, en déduit 1 800, 1 618 et 1 594 —
-   1,5 % puis 11 %, ce qui ne ressemble à aucune courbe.
+2. ~~**Formule d'XP de craft.**~~ Réglée pour de bon le 21 08 2026, non par un
+   raisonnement mais par **la source** : `Item.getCraftXpByJobLevel`, dans le
+   client Dofus décompilé.
 
-   L'XP de base d'une recette, elle, n'est publiée nulle part et n'a pas été
-   devinée : elle se **calibre** sur un relevé unique, l'XP vue et le niveau où
-   elle l'a été. Extrapoler une exponentielle sur deux cents niveaux depuis trois
-   points voisins aurait donné un facteur 7 d'erreur pour 1 % de dérive par niveau.
+   ```
+   basicXp = 20 × niveauRecette / (écart^1,1 / 10 + 1)
+   xp      = floor(basicXp × craftXpRatio / 100)
+   ```
+
+   Les six relevés de Brice tombent tous EXACTEMENT, au point près, alors
+   qu'aucun n'a servi à l'établir. Le `craftXpRatio` se lit sur l'objet, se
+   replie sur son type, et vaut 100 à défaut.
+
+   **Ce que cet épisode apprend.** On avait écrit ici qu'aucune formule ne
+   donnerait l'XP de base, parce que trois recettes de niveau 40 du même métier
+   rapportaient 160, 40 et 80 XP. Le raisonnement était juste, la prémisse était
+   incomplète : il manquait une colonne du schéma `Items`, que l'extraction allait
+   déjà chercher pour autre chose. « Aucune formule ne peut donner ce chiffre »
+   se déduisait de trois mesures et d'un schéma lu à moitié — et une conclusion
+   d'impossibilité mérite d'être vérifiée contre la source avant d'être écrite.
+
+   Le calibrage par relevé n'est pas jeté pour autant : il **prime** sur le
+   calcul quand il existe. La formule vient d'un client décompilé, une mise à
+   jour du jeu peut l'écarter, et une mesure réelle doit pouvoir reprendre la
+   main. Ce qui déduit un **ratio** et non une XP figée : le ratio ne dépend pas
+   du niveau, donc l'observation continue de se projeter juste.
 
 2 bis. ~~**La table d'XP par niveau de métier.**~~ Réglée le 20 08 2026, et par
    la mesure. Un palier coûte `20 × niveau`, donc atteindre le niveau L demande
@@ -358,21 +377,19 @@ donc servir le dossier, d'où `outils/servir.js`.
    raisonnement était défendable et il était faux — rien ne remplace une mesure.
    Plus de fichier de données ni d'interpolation : deux multiplications.
 
-2 ter. **Le coefficient de régression, lui, n'est pas confirmé.** Une recette
-   perd environ 1 % de son XP par niveau d'écart, d'après le forum officiel où
-   deux formules circulent, données de mémoire par des joueurs. L'argument qui
-   semblait départager les deux — la régularité des XP de base déduites des trois
-   relevés du métier 89 — est tombé : les relevés d'Alchimiste montrent que l'XP
-   de base est propre à chaque recette (160, 40 et 80 XP pour trois recettes de
-   niveau 40), donc cette régularité était une coïncidence. **Pour trancher :**
-   relever la même recette à deux niveaux de métier différents. En attendant,
-   l'écran signale les chiffres projetés plutôt qu'observés.
+2 ter. ~~**Le coefficient de régression.**~~ Tranché le 21 08 2026, par la même
+   source. Ce n'est **pas** la linéaire `1 − écart/100` qu'on appliquait, c'est
+   `1 / (écart^1,1 / 10 + 1)` — l'autre formule du forum, celle qu'on avait
+   écartée. L'écart n'est pas cosmétique : à trente niveaux, la linéaire annonce
+   70 % de l'XP là où le jeu en donne 19 %. Tout le chiffrage d'une montée sur
+   plusieurs paliers en était faussé, et toujours dans le sens optimiste.
 
-   Depuis le 20 08 2026, ce doute coûte beaucoup moins cher : un recalibrage ne
-   demande plus qu'un second relevé d'XP cumulée, geste qu'on fait de toute
-   façon. La projection ne sert donc que d'appoint entre deux mesures, et
-   relever la même recette à deux niveaux différents — ce qui trancherait la
-   question — arrive maintenant tout seul.
+   L'argument qui avait fait retenir la linéaire — la régularité des XP de base
+   déduites des trois relevés du métier 89 — reposait sur une coïncidence, comme
+   on le soupçonnait déjà. Il reposait en plus sur un niveau de métier noté d'un
+   cran à côté : ces relevés sont au métier 90, seule lecture qui les rende tous
+   exacts, l'autre exigeant un écart négatif.
+
 3. **Emplacement final** du dépôt git, hors de toute synchro de fichiers, et
    choix de l'hébergeur. Comparaison dans `calculateur/DEPLOIEMENT.md`.
    Cloudflare Pages avec Access est le seul moyen gratuit d'avoir une URL qui ne
@@ -429,6 +446,7 @@ d'Alt+Tab.
 | 15 08 2026 | Mode craft en moitié droite pleine hauteur, le client Unity se redimensionne correctement. |
 | 15 08 2026 | Aucun organizer Dofus installé, la bascule de personnage sera ajoutée au script existant. |
 | 15 08 2026 | DofusDB écarté pour cause de licence LPNC-IA, DofusDude retenu. |
+| 21 08 2026 | **L'XP par craft ne se relève plus : elle se calcule, avec la formule du jeu.** `Item.getCraftXpByJobLevel`, dans le client décompilé, donne `floor(20 × niveauRecette / (écart^1,1 / 10 + 1) × craftXpRatio / 100)`. Les six relevés de Brice y tombent tous au point près sans qu'aucun ait servi à l'établir. Le `craftXpRatio` — un champ des fichiers du jeu, porté par l'objet ou par son type — est ce qui manquait quand on avait conclu qu'aucune formule ne donnerait l'XP de base : l'Essence de Batofu est à 20 %, la Potion de Soin à 5 %, et voilà le rapport de 160 à 40 qu'on croyait inexplicable. `extraire-les-metiers.js` lit maintenant `Items` et `ItemTypes` en plus de `Recipes` et écrit le ratio en troisième élément, omis quand il vaut 100 : +4 Ko sur un fichier de 73. **Deux corrections de fond.** La régression n'était pas la linéaire `1 − écart/100` mais `1 / (écart^1,1 / 10 + 1)` — à trente niveaux d'écart, 19 % de l'XP et non 70 %, donc toute montée sur plusieurs paliers était chiffrée trop optimiste. Et 87 recettes ont un ratio nul : elles ne rapportent jamais rien, ce qu'aucun relevé n'aurait appris sans crafter pour rien. Le calibrage manuel reste, en secours, et prime sur le calcul ; il déduit désormais un ratio et non une XP figée, ce qui le rend projetable. |
 | 21 08 2026 | **Les objectifs `+1`/`+10`/`+20` ne remplissaient la quantité que par le chemin automatique.** Le champ « Vue au niveau » restait vide tant qu'aucune XP n'était enregistrée, avec pour seul indice de saisie le niveau de la RECETTE. Taper l'XP par craft et valider — le geste évident — enregistrait donc une observation sans niveau, que rien ne peut projeter : la recette restait « pas encore calibrée » et l'objectif n'écrivait aucune quantité, sans que le champ coupable soit désigné nulle part. Le niveau est maintenant pré-rempli avec celui du métier maintenant, écrit et non suggéré, et un champ vidé y retombe plutôt que de s'enregistrer à `null`. Le test d'interface ne couvrait que le calibrage par deux relevés, qui remplit les deux champs et masquait le défaut ; il couvre désormais le chemin manuel. |
 | 20 08 2026 | **L'XP par craft ne se saisit plus, elle se mesure. Schéma 8.** L'écart entre deux relevés d'XP cumulée, divisé par le nombre de crafts faits entre les deux, EST l'XP par craft : `dernierReleveDXPParMetier` garde l'avant-dernier relevé, la carte du métier propose d'attribuer le gain, un clic calibre la recette. C'est la réponse à « comment le jeu fait-il ? » — il ne fait rien de plus que compter l'XP totale, c'est nous qui devions apprendre à la lire. Les objectifs deviennent des niveaux À GAGNER, `+1`, `+10`, `+20`, et **remplissent la quantité du craft** — ils l'affichaient sans jamais l'écrire, donc ils ne servaient à rien. Un prix manquant n'est plus compté pour zéro en silence : coûts annoncés « au moins », gains « au plus », arbitrage crafter-ou-acheter muet plutôt que faux, et « calcul impossible » quand aucun prix n'est connu. La fenêtre PIP devient une liste de courses cochable, avec le panier à taper au HDV. Au passage, un défaut hérité du schéma 7 : `experienceParCraft` avait disparu de l'état mais était encore multiplié dans l'analyse, ce qui donnait `NaN` et faisait disparaître la case « coût par point d'XP ». |
 | 20 08 2026 | XP de métier : XP de base calibrée par un relevé unique plutôt que devinée — les relevés d'Alchimiste montrent qu'elle est propre à chaque recette et qu'aucune formule ne la donnera. Objectifs de niveau comptés palier par palier. Courbe des niveaux mesurée, `10 × L × (L−1)`, qui remplace une table dérivée à la main et fausse d'un facteur deux. Coefficient de régression toujours non confirmé, et signalé comme tel. Les ressources craftées sur place quittent la liste de courses pour une liste à part, prix toujours saisissables. |

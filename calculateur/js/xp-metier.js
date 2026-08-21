@@ -2,52 +2,62 @@
  * Expérience de métier : ce qu'un craft rapporte, et combien il en faut.
  *
  * Fonctions pures, sans DOM ni réseau, comme `moteur.js` et `arbre-de-crafts.js`.
- * La table d'XP est injectée plutôt qu'importée, ce qui permet aux tests de la
- * remplacer par une table courte et lisible à la main.
  *
- * LA FORMULE, ET CE QUI L'ÉTABLIT
+ * LA FORMULE N'EST PLUS DEVINÉE : C'EST CELLE DU CLIENT DOFUS
  *
- *     xpGagnée = xpDeBase × (1 − (niveauDeMétier − niveauDeRecette) / 100)
+ *     basicXp = 20 × niveauRecette / (écart^1,1 / 10 + 1)
+ *     xp      = floor(basicXp × ratio / 100)          écart = niveauMétier − niveauRecette
  *
- * Soit un point de pourcentage perdu par niveau d'écart : c'est la régression
- * qui fait qu'une recette rentable à 40 ne vaut plus rien à 140.
+ * Recopiée de `Item.getCraftXpByJobLevel`, dans le client décompilé. Ce n'est
+ * donc plus une hypothèse tirée de deux formules de forum, c'est le calcul que
+ * le jeu exécute — et les six relevés de Brice tombent tous EXACTEMENT, au point
+ * près, alors qu'aucun n'a servi à l'établir.
  *
- * Deux formules circulent sur le forum officiel, toutes deux données de mémoire
- * par des joueurs, et celle-ci est retenue faute de mieux. LE COEFFICIENT N'EST
- * PAS CONFIRMÉ, contrairement à la courbe de niveau ci-dessous qui, elle, est
- * mesurée.
+ * CE QUI AVAIT MANQUÉ, ET LA CONCLUSION QU'IL AVAIT FAIT TIRER
  *
- * Il l'a semblé un moment : les trois relevés du métier 89 — recette 90 à
- * 1 800, 89 à 1 618, 88 à 1 449 — donnaient des XP de base de 1 782, 1 618 et
- * 1 464, soit une progression régulière d'environ 10 % par niveau de recette,
- * là où la formule concurrente en `1 / (1 + 0,1 × écart^1,1)` donnait 1,5 %
- * puis 11 %. L'argument paraissait fort.
+ * On avait écrit ici, noir sur blanc, qu'aucune formule ne donnerait l'XP de
+ * base : trois recettes de niveau 40 du même métier rapportaient 160, 40 et 80
+ * XP, donc l'XP semblait propre à chaque recette, et seul un relevé en jeu
+ * pouvait la livrer. Le raisonnement était juste, la prémisse était incomplète.
  *
- * Il ne tient plus. Les relevés d'Alchimiste 40 le démontent : trois recettes
- * de niveau 40, au même niveau de métier, rapportent 160, 40 et 80 XP. L'XP de
- * base est donc PROPRE À CHAQUE RECETTE, et ni son niveau ni son nombre de
- * cases ne la prédisent. La régularité observée sur les trois recettes de
- * niveau 88, 89 et 90 était une coïncidence, et ne prouvait rien.
+ * Il manquait un champ, `craftXpRatio`, un pourcentage porté par l'objet et, à
+ * défaut, par SON TYPE. L'Essence de Batofu est une « Essence de gardien de
+ * donjon », à 20 % ; la Potion de Soin est une « Potion », à 5 %. Quatre fois
+ * moins, et c'est très exactement le rapport de 160 à 40. La troisième recette
+ * est à 10 %. Il n'y avait aucune irrégularité à expliquer, seulement une
+ * colonne qu'on ne lisait pas.
  *
- * Conséquence pratique : le coefficient de 1 % par niveau reste une hypothèse.
- * Un seul relevé la trancherait — la même recette, à deux niveaux de métier
- * différents. En attendant, l'écran signale quand un chiffre est projeté plutôt
- * qu'observé, et un relevé frais vaut toujours mieux qu'une longue projection.
+ * La leçon vaut d'être gardée : « aucune formule ne peut donner ce chiffre » se
+ * déduisait de trois mesures et d'un schéma de données lu à moitié. Le fichier
+ * `Items` de Datafus portait la réponse depuis le début, et l'extraction allait
+ * déjà le chercher pour autre chose.
  *
- * L'XP DE BASE NE SE DEVINE PAS, ELLE SE CALIBRE
+ * DEUX CONSÉQUENCES QUI CHANGENT L'USAGE
  *
- * Aucune source publique ne donne l'XP de base d'une recette, et on sait
- * maintenant qu'aucune formule ne la donnera : elle ne se déduit ni du niveau
- * de la recette ni de son nombre de cases. Essence de Batofu et Potion de Soin
- * sont toutes deux de niveau 40, chez le même métier ; l'une rapporte 160, la
- * seconde 40.
+ *   Plus rien à calibrer. L'XP d'un craft se lit d'un objet ajouté à la session,
+ *   sans qu'aucun lot n'ait été fait ni aucun relevé pris. Le calibrage manuel
+ *   reste, en SECOURS : il prime quand il existe, ce qui laisse le dernier mot à
+ *   une mesure réelle si le jeu venait à s'écarter du calcul.
  *
- * On prend donc le problème par l'autre bout : Brice relève UNE fois l'XP que
- * lui rapporte une recette, en disant à quel niveau de métier il l'a vue, et la
- * formule remonte à l'XP de base. C'est un relevé qu'il faisait déjà — il ne
- * servait simplement à rien. Ce choix n'était au départ qu'une prudence ; les
- * relevés d'Alchimiste en ont fait la seule approche possible.
+ *   La régression n'est plus linéaire. On appliquait `1 − écart/100`, l'une des
+ *   deux formules qui circulaient sur le forum ; c'est l'autre qui était la
+ *   bonne. La différence n'est pas cosmétique — à trente niveaux d'écart, la
+ *   linéaire annonce 70 % de l'XP là où le jeu en donne 21 %.
+ *
+ * L'ÉCART NÉGATIF EXISTE, ET IL EST BORNÉ À ZÉRO
+ *
+ * Une recette peut dépasser le niveau du métier — les relevés de Brice en
+ * contiennent un. `Math.pow` d'un négatif à la puissance 1,1 rend `NaN`, et le
+ * client s'en accommode parce que le cas ne l'atteint pas. Ici on borne l'écart
+ * à zéro, ce qui rend le plein d'XP : c'est ce que le jeu donne au niveau exact
+ * de la recette, et le relevé « recette 90 au métier 90 » le confirme à 1 800.
  */
+
+/**
+ * Le multiplicateur du client, `20`. Une recette de niveau L rapporte `20 × L`
+ * au niveau de métier exact de la recette, avant application du ratio.
+ */
+const MULTIPLICATEUR_DE_BASE = 20;
 
 /** Écart maximal au-delà duquel une recette ne rapporte plus rien. */
 const ECART_ANNULANT_LEXPERIENCE = 100;
@@ -103,41 +113,82 @@ export function calculerLeNiveauDepuisLXP(experienceTotale) {
 }
 
 /**
- * XP de base d'une recette, déduite d'une observation.
+ * Coefficient de régression : ce qui reste de l'XP quand le métier dépasse la
+ * recette. Vaut 1 au niveau exact de la recette, 0 au-delà de cent niveaux.
  *
- * @param {number} xpObservee            XP vue en jeu pour un craft
- * @param {number} niveauDeMetierObserve niveau du métier à ce moment-là
- * @param {number} niveauDeLaRecette     niveau de l'objet produit
- * @returns {number} l'XP de base, 0 si l'observation ne permet rien d'en tirer
- */
-export function deduireLExperienceDeBase(xpObservee, niveauDeMetierObserve, niveauDeLaRecette) {
-  if (!(xpObservee > 0)) return 0;
-  const facteur = calculerLeFacteurDeRegression(niveauDeMetierObserve, niveauDeLaRecette);
-  // Une observation faite alors que la recette ne rapportait déjà plus rien
-  // n'apprend rien : diviser par zéro donnerait un infini, et prétendre en tirer
-  // une XP de base serait pire que de ne rien afficher.
-  if (facteur <= 0) return 0;
-  return xpObservee / facteur;
-}
-
-/**
- * Coefficient appliqué à l'XP de base, selon l'écart de niveau.
- * Jamais négatif : au-delà de cent niveaux d'écart, la recette ne rapporte plus.
+ * L'écart est borné à zéro par le bas. Une recette au-dessus du niveau du métier
+ * ne rapporte pas DAVANTAGE que le plein — et sans cette borne, `Math.pow` d'un
+ * négatif rendrait `NaN`, qui contaminerait tout le calcul en silence.
  */
 export function calculerLeFacteurDeRegression(niveauDeMetier, niveauDeLaRecette) {
   const ecart = (niveauDeMetier || 0) - (niveauDeLaRecette || 0);
-  return Math.max(0, 1 - ecart / ECART_ANNULANT_LEXPERIENCE);
+  if (ecart > ECART_ANNULANT_LEXPERIENCE) return 0;
+  return 1 / (Math.pow(Math.max(0, ecart), 1.1) / 10 + 1);
+}
+
+/**
+ * XP de base d'une recette, avant régression et avant ratio.
+ *
+ * `20 × niveauDeLaRecette` : une recette de niveau 40 vaut 800, une de niveau 90
+ * en vaut 1 800. C'est la même constante que le palier de niveau — le jeu la
+ * réutilise, et ce n'est probablement pas un hasard.
+ */
+export function calculerLExperienceDeBaseDUneRecette(niveauDeLaRecette) {
+  return MULTIPLICATEUR_DE_BASE * Math.max(0, niveauDeLaRecette || 0);
 }
 
 /**
  * XP rapportée par un craft, à un niveau de métier donné.
  *
- * Tronquée et non arrondie : c'est ce que rapportent les relevés du forum, et
- * l'écart ne dépasse jamais un point d'XP de toute façon.
+ * Tronquée et non arrondie, comme le client, qui fait `Math.floor` du produit
+ * complet — donc APRÈS le ratio, pas avant. Tronquer deux fois donnerait un
+ * point d'écart sur certaines recettes.
+ *
+ * @param {number} niveauDeMetier    où en est le métier
+ * @param {number} niveauDeLaRecette niveau de l'objet produit
+ * @param {number} ratioDXP          `craftXpRatio` en pourcentage, 100 par défaut
  */
-export function calculerLExperienceDUnCraft(xpDeBase, niveauDeMetier, niveauDeLaRecette) {
-  if (!(xpDeBase > 0)) return 0;
-  return Math.floor(xpDeBase * calculerLeFacteurDeRegression(niveauDeMetier, niveauDeLaRecette));
+export function calculerLExperienceDUnCraft(niveauDeMetier, niveauDeLaRecette, ratioDXP) {
+  const ratio = ratioDXP === undefined || ratioDXP === null ? 100 : ratioDXP;
+  if (!(ratio > 0)) return 0;
+
+  const base = calculerLExperienceDeBaseDUneRecette(niveauDeLaRecette)
+    * calculerLeFacteurDeRegression(niveauDeMetier, niveauDeLaRecette);
+  return Math.floor(base * ratio / 100);
+}
+
+/**
+ * XP d'un craft quand une observation réelle prime sur le calcul.
+ *
+ * LE CALIBRAGE MANUEL SURVIT, EN SECOURS
+ *
+ * La formule est désormais celle du client, donc juste ; mais elle est recopiée
+ * d'un client décompilé, et une mise à jour du jeu pourrait l'écarter sans
+ * prévenir. Un relevé réel garde donc le dernier mot : on en déduit le ratio
+ * qu'il implique, et on le substitue à celui du fichier de données.
+ *
+ * Déduire le RATIO plutôt que de figer l'XP observée n'est pas un détail : le
+ * ratio est indépendant du niveau, donc l'observation continue de se projeter
+ * correctement à mesure que le métier monte. Figer l'XP la rendrait fausse dès
+ * le niveau suivant.
+ *
+ * @param {number} xpObservee            XP vue en jeu pour un craft
+ * @param {number} niveauDeMetierObserve niveau du métier à ce moment-là
+ * @param {number} niveauDeLaRecette     niveau de l'objet produit
+ * @returns {number|null} le ratio impliqué, null si l'observation n'apprend rien
+ */
+export function deduireLeRatioDepuisUneObservation(
+    xpObservee, niveauDeMetierObserve, niveauDeLaRecette) {
+  if (!(xpObservee > 0)) return null;
+
+  const base = calculerLExperienceDeBaseDUneRecette(niveauDeLaRecette)
+    * calculerLeFacteurDeRegression(niveauDeMetierObserve, niveauDeLaRecette);
+  // Une observation faite alors que la recette ne rapportait déjà plus rien
+  // n'apprend rien : diviser par zéro donnerait un infini, et prétendre en tirer
+  // un ratio serait pire que de ne rien afficher.
+  if (!(base > 0)) return null;
+
+  return xpObservee * 100 / base;
 }
 
 /* ============================================================
@@ -159,13 +210,13 @@ export function calculerLExperienceDUnCraft(xpDeBase, niveauDeMetier, niveauDeLa
  *   @param {number} situation.niveauActuel
  *   @param {number} situation.experienceActuelle   XP cumulée, pas celle du palier
  *   @param {number} situation.niveauVise
- *   @param {number} situation.xpDeBase
  *   @param {number} situation.niveauDeLaRecette
+ *   @param {number} situation.ratioDXP           `craftXpRatio` en pourcentage
  * @returns {{atteignable:boolean, nombreDeCrafts:number, experienceAGagner:number,
  *            paliers:Array, niveauDeBlocage:number|null}}
  */
 export function calculerLesCraftsPourAtteindreUnNiveau(situation) {
-  const { niveauActuel, experienceActuelle, niveauVise, xpDeBase, niveauDeLaRecette } = situation;
+  const { niveauActuel, experienceActuelle, niveauVise, niveauDeLaRecette, ratioDXP } = situation;
 
   const resultat = {
     atteignable: true,
@@ -177,7 +228,10 @@ export function calculerLesCraftsPourAtteindreUnNiveau(situation) {
     niveauDeBlocage: null
   };
 
-  if (!(xpDeBase > 0) || niveauVise <= niveauActuel) {
+  // Un ratio nul est une vraie donnée du jeu, pas une absence : quatre-vingts
+  // recettes ne rapportent jamais rien, quel que soit le niveau. Les traiter
+  // comme « pas encore calibrées » enverrait crafter pour rien.
+  if (!(niveauDeLaRecette > 0) || niveauVise <= niveauActuel) {
     resultat.atteignable = niveauVise <= niveauActuel;
     return resultat;
   }
@@ -186,7 +240,7 @@ export function calculerLesCraftsPourAtteindreUnNiveau(situation) {
   const plafond = Math.min(niveauVise, NIVEAU_MAXIMAL_DUN_METIER);
 
   for (let niveau = niveauActuel; niveau < plafond; niveau++) {
-    const xpParCraft = calculerLExperienceDUnCraft(xpDeBase, niveau, niveauDeLaRecette);
+    const xpParCraft = calculerLExperienceDUnCraft(niveau, niveauDeLaRecette, ratioDXP);
 
     // La recette est arrivée au bout de ce qu'elle peut donner. On s'arrête là
     // et on le dit, plutôt que de renvoyer un nombre de crafts infini.

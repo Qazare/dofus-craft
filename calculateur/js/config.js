@@ -39,11 +39,25 @@ export const NOMBRE_DE_SUGGESTIONS_PAR_FAMILLE = 6;
    `outils/extraire-les-metiers.js`, versionné, à rejouer à chaque extension
    du jeu qui ajoute des recettes.
 
-   Format volontairement compact, `{ identifiantAnkama: [jobId, niveau] }` :
+   Format volontairement compact, `{ identifiantAnkama: [jobId, niveau, ratio] }` :
    le fichier est téléchargé par le navigateur, et nommer les champs
-   triplerait son poids pour une lisibilité dont seul l'outil a besoin. ---- */
+   triplerait son poids pour une lisibilité dont seul l'outil a besoin.
+
+   Le troisième élément est le `craftXpRatio` du client, en pourcentage, déjà
+   replié de l'objet sur son type à l'extraction. IL EST OMIS quand il vaut le
+   défaut, ce qui est le cas des quatre cinquièmes des recettes. C'est lui qui
+   donne l'XP d'un craft sans que rien n'ait à être relevé en jeu. ---- */
 
 export const ADRESSE_DES_METIERS_PAR_RECETTE = "donnees/metiers-par-recette.json";
+
+/**
+ * Ratio d'XP par défaut d'une recette, en pourcentage.
+ *
+ * Le `craftXpRatio` du client vaut `−1` quand ni l'objet ni son type n'en fixe
+ * un, et le calcul retombe alors sur 100 %. L'extraction ayant déjà fait ce
+ * repli, le fichier de données omet simplement le champ dans ce cas.
+ */
+export const RATIO_DXP_PAR_DEFAUT = 100;
 
 /**
  * Objectifs proposés sur une carte de craft, en NOMBRE DE NIVEAUX À GAGNER.
